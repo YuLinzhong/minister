@@ -1,0 +1,7 @@
+services:
+  minister:
+    build: .
+    container_name: minister-bot
+    restart: unless-stopped
+    env_file:
+      - .env

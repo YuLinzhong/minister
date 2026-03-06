@@ -1,7 +1,7 @@
 // P0: Task tools — create, update, query, complete + tasklist management
 import { larkClient } from "../client.js";
 import { toUnixSeconds, unknownToolError } from "../utils.js";
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 
 export const taskToolDefs = [
   {
@@ -119,7 +119,7 @@ export async function handleTaskTool(
             role: m.role || "assignee",
           })),
           origin: {
-            platform_i18n_name: '{"zh_cn": "秘书AI", "en_us": "Mishu AI"}',
+            platform_i18n_name: '{"zh_cn": "丞相AI", "en_us": "Minister AI"}',
           },
         },
       });

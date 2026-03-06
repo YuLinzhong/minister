@@ -1,7 +1,7 @@
 // P1: Calendar tools — create event, query events, freebusy
 import { larkClient } from "../client.js";
 import { toUnixSeconds, unknownToolError } from "../utils.js";
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 
 export const calendarToolDefs = [
   {

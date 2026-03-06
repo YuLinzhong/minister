@@ -1,6 +1,6 @@
 // Bot Server entry point — WebSocket long-connection to Feishu
 import * as Lark from "@larksuiteoapi/node-sdk";
-import { config } from "@mishu/shared";
+import { config } from "@minister/shared";
 import { handleMessage } from "./message-handler.js";
 
 const wsClient = new Lark.WSClient({
@@ -9,7 +9,7 @@ const wsClient = new Lark.WSClient({
   loggerLevel: Lark.LoggerLevel.info,
 });
 
-console.log("[Mishu] Starting bot server...");
+console.log("[Minister] Starting bot server...");
 
 wsClient.start({
   eventDispatcher: new Lark.EventDispatcher({}).register({
@@ -17,10 +17,10 @@ wsClient.start({
       try {
         await handleMessage(data as any);
       } catch (err) {
-        console.error("[Mishu] Message handler error:", err);
+        console.error("[Minister] Message handler error:", err);
       }
     },
   }),
 });
 
-console.log("[Mishu] Bot server started. Listening for messages...");
+console.log("[Minister] Bot server started. Listening for messages...");

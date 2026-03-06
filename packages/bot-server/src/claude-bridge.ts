@@ -2,8 +2,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Session, ClaudeStreamEvent } from "@mishu/shared";
-import { config } from "@mishu/shared";
+import type { Session, ClaudeStreamEvent } from "@minister/shared";
+import { config } from "@minister/shared";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "../../..");

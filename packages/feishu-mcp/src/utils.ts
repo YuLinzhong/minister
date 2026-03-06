@@ -1,5 +1,5 @@
 // Shared utility functions for feishu-mcp tool handlers
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 
 /**
  * Convert a date/timestamp string to Unix seconds.

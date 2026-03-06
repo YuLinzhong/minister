@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 import { messageToolDefs, handleMessageTool } from "./tools/message.js";
 import { taskToolDefs, handleTaskTool } from "./tools/task.js";
 import { contactToolDefs, handleContactTool } from "./tools/contact.js";

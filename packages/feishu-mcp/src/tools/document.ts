@@ -1,7 +1,7 @@
 // P1: Document tools — create, read, update
 import { larkClient } from "../client.js";
 import { unknownToolError } from "../utils.js";
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 
 export const documentToolDefs = [
   {

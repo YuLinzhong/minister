@@ -1,5 +1,5 @@
 // Manage per-user Claude Code sessions
-import type { Session } from "@mishu/shared";
+import type { Session } from "@minister/shared";
 
 const sessions = new Map<string, Session>();
 const SESSION_TTL = 30 * 60 * 1000; // 30 minutes

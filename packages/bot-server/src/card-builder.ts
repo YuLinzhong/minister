@@ -53,7 +53,7 @@ export function buildProgressCard(opts: CardOptions): string {
 
 export function buildThinkingCard(): string {
   return buildProgressCard({
-    title: "Mishu is thinking...",
+    title: "Minister is thinking...",
     content: "Analyzing your request...",
     status: "Thinking...",
     headerColor: "blue",
@@ -62,7 +62,7 @@ export function buildThinkingCard(): string {
 
 export function buildResultCard(content: string): string {
   return buildProgressCard({
-    title: "Mishu",
+    title: "Minister",
     content,
     status: "Done",
     headerColor: "green",
@@ -71,7 +71,7 @@ export function buildResultCard(content: string): string {
 
 export function buildErrorCard(error: string): string {
   return buildProgressCard({
-    title: "Mishu - Error",
+    title: "Minister - Error",
     content: error,
     status: "Failed",
     headerColor: "red",

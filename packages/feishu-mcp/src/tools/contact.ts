@@ -1,7 +1,7 @@
 // P0: Contact tools — search user, get user info
 import { larkClient } from "../client.js";
 import { unknownToolError } from "../utils.js";
-import type { ToolResult } from "@mishu/shared";
+import type { ToolResult } from "@minister/shared";
 
 export const contactToolDefs = [
   {

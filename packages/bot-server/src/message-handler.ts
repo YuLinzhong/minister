@@ -110,24 +110,24 @@ export async function handleMessage(data: {
         updateCard(
           cardMsgId,
           buildProgressCard({
-            title: "Mishu is thinking...",
+            title: "Minister is thinking...",
             content: chunk,
             tools,
             status: "Processing...",
           }),
-        ).catch((e) => console.warn("[Mishu] Card update failed:", e));
+        ).catch((e) => console.warn("[Minister] Card update failed:", e));
       },
       onToolUse: (toolName) => {
         tools.push(toolName);
         updateCard(
           cardMsgId,
           buildProgressCard({
-            title: "Mishu is working...",
+            title: "Minister is working...",
             content: "Calling tools...",
             tools,
             status: `Using: ${toolName}`,
           }),
-        ).catch((e) => console.warn("[Mishu] Card update failed:", e));
+        ).catch((e) => console.warn("[Minister] Card update failed:", e));
       },
     });
 

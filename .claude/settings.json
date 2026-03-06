@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "feishu": {
-      "command": "npx",
-      "args": ["tsx", "./packages/feishu-mcp/src/index.ts"],
+      "command": "bun",
+      "args": ["run", "./packages/feishu-mcp/src/index.ts"],
       "env": {
         "FEISHU_APP_ID": "${FEISHU_APP_ID}",
         "FEISHU_APP_SECRET": "${FEISHU_APP_SECRET}"
