@@ -1,0 +1,11 @@
+{
+  "name": "@mishu/feishu-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "^1.56.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@mishu/shared": "*"
+  }
+}

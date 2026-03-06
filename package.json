@@ -1,0 +1,19 @@
+{
+  "name": "mishu",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "bot": "tsx packages/bot-server/src/index.ts",
+    "mcp": "tsx packages/feishu-mcp/src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0",
+    "@types/node": "^22.0.0"
+  }
+}

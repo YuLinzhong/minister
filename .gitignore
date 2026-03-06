@@ -1,0 +1,10 @@
+.ace-tool/
+node_modules/
+dist/
+*.js
+*.d.ts
+*.js.map
+!jest.config.js
+.env
+.env.local
+*.log

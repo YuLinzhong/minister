@@ -1,0 +1,198 @@
+// P1: Calendar tools — create event, query events, freebusy
+import { larkClient } from "../client.js";
+import type { ToolResult } from "@mishu/shared";
+
+export const calendarToolDefs = [
+  {
+    name: "cal_create_event",
+    description:
+      "Create a calendar event in the primary calendar. Can invite attendees.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        summary: { type: "string", description: "Event title" },
+        description: { type: "string", description: "Event description" },
+        start_time: {
+          type: "string",
+          description: "Start time (Unix timestamp in seconds or ISO string)",
+        },
+        end_time: {
+          type: "string",
+          description: "End time (Unix timestamp in seconds or ISO string)",
+        },
+        attendees: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: ["user", "chat", "resource"],
+                description: "Attendee type",
+              },
+              user_id: { type: "string", description: "User open_id" },
+              chat_id: {
+                type: "string",
+                description: "Chat ID (for group events)",
+              },
+            },
+          },
+          description: "Event attendees",
+        },
+      },
+      required: ["summary", "start_time", "end_time"],
+    },
+  },
+  {
+    name: "cal_query_events",
+    description: "Query calendar events within a time range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        calendar_id: {
+          type: "string",
+          description: "Calendar ID (default: primary)",
+        },
+        start_time: {
+          type: "string",
+          description: "Range start (Unix timestamp in seconds)",
+        },
+        end_time: {
+          type: "string",
+          description: "Range end (Unix timestamp in seconds)",
+        },
+      },
+      required: ["start_time", "end_time"],
+    },
+  },
+  {
+    name: "cal_freebusy",
+    description:
+      "Query free/busy status for one or more users within a time range.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        user_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of user open_ids to query",
+        },
+        start_time: {
+          type: "string",
+          description: "Range start (Unix timestamp in seconds)",
+        },
+        end_time: {
+          type: "string",
+          description: "Range end (Unix timestamp in seconds)",
+        },
+      },
+      required: ["user_ids", "start_time", "end_time"],
+    },
+  },
+];
+
+function toTimestamp(val: string): string {
+  if (/^\d+$/.test(val)) return val;
+  return String(Math.floor(new Date(val).getTime() / 1000));
+}
+
+export async function handleCalendarTool(
+  name: string,
+  args: Record<string, unknown>,
+): Promise<ToolResult> {
+  switch (name) {
+    case "cal_create_event": {
+      const calendarId = "primary";
+      const attendees = args.attendees as
+        | Array<{ type?: string; user_id?: string; chat_id?: string }>
+        | undefined;
+
+      const res = await larkClient.calendar.v4.calendarEvent.create({
+        path: { calendar_id: calendarId },
+        data: {
+          summary: args.summary as string,
+          description: (args.description as string) || undefined,
+          start_time: {
+            timestamp: toTimestamp(args.start_time as string),
+          },
+          end_time: {
+            timestamp: toTimestamp(args.end_time as string),
+          },
+          attendee_ability: "can_modify_event",
+        },
+      });
+
+      const eventId = res.data?.event?.event_id;
+
+      // Add attendees if specified
+      if (eventId && attendees?.length) {
+        await larkClient.calendar.v4.calendarEventAttendee.create({
+          path: { calendar_id: calendarId, event_id: eventId },
+          data: {
+            attendees: attendees.map((a) => ({
+              type: (a.type as "user" | "chat" | "resource") || "user",
+              user_id: a.user_id,
+              chat_id: a.chat_id,
+            })),
+          },
+        });
+      }
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Event created. event_id: ${eventId}, summary: ${args.summary}`,
+          },
+        ],
+      };
+    }
+
+    case "cal_query_events": {
+      const calendarId = (args.calendar_id as string) || "primary";
+      const res = await larkClient.calendar.v4.calendarEvent.list({
+        path: { calendar_id: calendarId },
+        params: {
+          start_time: toTimestamp(args.start_time as string),
+          end_time: toTimestamp(args.end_time as string),
+          page_size: 50,
+        },
+      });
+      const events = (res.data?.items ?? []).map((e) => ({
+        event_id: e.event_id,
+        summary: e.summary,
+        start_time: e.start_time,
+        end_time: e.end_time,
+        status: e.status,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(events, null, 2) }],
+      };
+    }
+
+    case "cal_freebusy": {
+      const userIds = args.user_ids as string[];
+      const res = await larkClient.calendar.v4.freebusy.list({
+        data: {
+          time_min: toTimestamp(args.start_time as string),
+          time_max: toTimestamp(args.end_time as string),
+          user_id: { user_ids: userIds, id_type: "open_id" },
+        },
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(res.data?.freebusy_list ?? [], null, 2),
+          },
+        ],
+      };
+    }
+
+    default:
+      return {
+        content: [{ type: "text", text: `Unknown calendar tool: ${name}` }],
+        isError: true,
+      };
+  }
+}
