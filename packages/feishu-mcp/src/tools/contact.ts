@@ -1,5 +1,6 @@
 // P0: Contact tools — search user, get user info
 import { larkClient } from "../client.js";
+import { unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const contactToolDefs = [
@@ -87,9 +88,6 @@ export async function handleContactTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown contact tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

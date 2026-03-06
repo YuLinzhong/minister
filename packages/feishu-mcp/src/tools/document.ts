@@ -1,5 +1,6 @@
 // P1: Document tools — create, read, update
 import { larkClient } from "../client.js";
+import { unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const documentToolDefs = [
@@ -118,9 +119,6 @@ export async function handleDocumentTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown document tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

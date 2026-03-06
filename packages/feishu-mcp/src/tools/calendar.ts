@@ -1,5 +1,6 @@
 // P1: Calendar tools — create event, query events, freebusy
 import { larkClient } from "../client.js";
+import { toUnixSeconds, unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const calendarToolDefs = [
@@ -91,11 +92,6 @@ export const calendarToolDefs = [
   },
 ];
 
-function toTimestamp(val: string): string {
-  if (/^\d+$/.test(val)) return val;
-  return String(Math.floor(new Date(val).getTime() / 1000));
-}
-
 export async function handleCalendarTool(
   name: string,
   args: Record<string, unknown>,
@@ -113,10 +109,10 @@ export async function handleCalendarTool(
           summary: args.summary as string,
           description: (args.description as string) || undefined,
           start_time: {
-            timestamp: toTimestamp(args.start_time as string),
+            timestamp: toUnixSeconds(args.start_time as string),
           },
           end_time: {
-            timestamp: toTimestamp(args.end_time as string),
+            timestamp: toUnixSeconds(args.end_time as string),
           },
           attendee_ability: "can_modify_event",
         },
@@ -153,8 +149,8 @@ export async function handleCalendarTool(
       const res = await larkClient.calendar.v4.calendarEvent.list({
         path: { calendar_id: calendarId },
         params: {
-          start_time: toTimestamp(args.start_time as string),
-          end_time: toTimestamp(args.end_time as string),
+          start_time: toUnixSeconds(args.start_time as string),
+          end_time: toUnixSeconds(args.end_time as string),
           page_size: 50,
         },
       });
@@ -174,8 +170,8 @@ export async function handleCalendarTool(
       const userIds = args.user_ids as string[];
       const res = await larkClient.calendar.v4.freebusy.list({
         data: {
-          time_min: toTimestamp(args.start_time as string),
-          time_max: toTimestamp(args.end_time as string),
+          time_min: toUnixSeconds(args.start_time as string),
+          time_max: toUnixSeconds(args.end_time as string),
           user_id: { user_ids: userIds, id_type: "open_id" },
         },
       });
@@ -190,9 +186,6 @@ export async function handleCalendarTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown calendar tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

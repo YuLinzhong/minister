@@ -9,10 +9,11 @@ export interface Session {
 }
 
 export interface ClaudeStreamEvent {
-  type: string;
-  subtype?: string;
+  type: "assistant" | "result" | string;
+  subtype?: "text" | "tool_use" | string;
   content?: string;
   session_id?: string;
+  tool_name?: string;
 }
 
 export interface ToolResult {

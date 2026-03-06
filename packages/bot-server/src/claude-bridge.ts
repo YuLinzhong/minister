@@ -39,7 +39,6 @@ export async function runClaude(
 
   return new Promise((resolve, reject) => {
     const proc: ChildProcess = spawn("claude", args, {
-      env: { ...process.env },
       cwd: PROJECT_ROOT,
       shell: true,
     });
@@ -66,7 +65,7 @@ export async function runClaude(
             callbacks.onText?.(event.content || "");
           }
           if (event.type === "assistant" && event.subtype === "tool_use") {
-            const toolName = (event as any).tool_name || "unknown";
+            const toolName = event.tool_name || "unknown";
             tools.push(toolName);
             callbacks.onToolUse?.(toolName);
           }

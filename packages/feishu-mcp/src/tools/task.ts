@@ -1,5 +1,6 @@
 // P0: Task tools — create, update, query, complete + tasklist management
 import { larkClient } from "../client.js";
+import { toUnixSeconds, unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const taskToolDefs = [
@@ -96,12 +97,6 @@ export const taskToolDefs = [
   },
 ];
 
-function parseDue(due: string): string {
-  // Accept both unix timestamp and ISO date
-  if (/^\d+$/.test(due)) return due;
-  return String(Math.floor(new Date(due).getTime() / 1000));
-}
-
 export async function handleTaskTool(
   name: string,
   args: Record<string, unknown>,
@@ -111,7 +106,7 @@ export async function handleTaskTool(
       const members = args.members as
         | Array<{ id: string; id_type?: string; role?: string }>
         | undefined;
-      const due = args.due ? parseDue(args.due as string) : undefined;
+      const due = args.due ? toUnixSeconds(args.due as string) : undefined;
 
       const res = await larkClient.task.v2.task.create({
         data: {
@@ -162,7 +157,7 @@ export async function handleTaskTool(
       }
       if (args.due) {
         updateData.due = {
-          timestamp: parseDue(args.due as string),
+          timestamp: toUnixSeconds(args.due as string),
           is_all_day: false,
         };
         updateFields.push("due");
@@ -226,9 +221,6 @@ export async function handleTaskTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown task tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

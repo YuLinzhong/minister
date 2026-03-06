@@ -1,5 +1,6 @@
 // P0: Message tools — send, reply, read history
 import { larkClient } from "../client.js";
+import { unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const messageToolDefs = [
@@ -142,9 +143,6 @@ export async function handleMessageTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown message tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

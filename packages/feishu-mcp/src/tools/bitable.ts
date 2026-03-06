@@ -1,5 +1,6 @@
 // P1: Bitable (multi-dimensional table) tools
 import { larkClient } from "../client.js";
+import { unknownToolError } from "../utils.js";
 import type { ToolResult } from "@mishu/shared";
 
 export const bitableToolDefs = [
@@ -166,9 +167,6 @@ export async function handleBitableTool(
     }
 
     default:
-      return {
-        content: [{ type: "text", text: `Unknown bitable tool: ${name}` }],
-        isError: true,
-      };
+      return unknownToolError(name);
   }
 }

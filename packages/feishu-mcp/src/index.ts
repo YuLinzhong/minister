@@ -23,23 +23,25 @@ const allTools = [
 ];
 
 // Build a router map: tool name -> handler function
+const toolModules: Array<{
+  defs: typeof messageToolDefs;
+  handler: (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
+}> = [
+  { defs: messageToolDefs, handler: handleMessageTool },
+  { defs: taskToolDefs, handler: handleTaskTool },
+  { defs: contactToolDefs, handler: handleContactTool },
+  { defs: bitableToolDefs, handler: handleBitableTool },
+  { defs: documentToolDefs, handler: handleDocumentTool },
+  { defs: calendarToolDefs, handler: handleCalendarTool },
+];
+
 const toolHandlers = new Map<
   string,
   (args: Record<string, unknown>) => Promise<ToolResult>
 >();
-
-for (const def of messageToolDefs)
-  toolHandlers.set(def.name, (a) => handleMessageTool(def.name, a));
-for (const def of taskToolDefs)
-  toolHandlers.set(def.name, (a) => handleTaskTool(def.name, a));
-for (const def of contactToolDefs)
-  toolHandlers.set(def.name, (a) => handleContactTool(def.name, a));
-for (const def of bitableToolDefs)
-  toolHandlers.set(def.name, (a) => handleBitableTool(def.name, a));
-for (const def of documentToolDefs)
-  toolHandlers.set(def.name, (a) => handleDocumentTool(def.name, a));
-for (const def of calendarToolDefs)
-  toolHandlers.set(def.name, (a) => handleCalendarTool(def.name, a));
+for (const { defs, handler } of toolModules) {
+  for (const def of defs) toolHandlers.set(def.name, (a) => handler(def.name, a));
+}
 
 const server = new Server(
   { name: "feishu-mcp", version: "0.1.0" },

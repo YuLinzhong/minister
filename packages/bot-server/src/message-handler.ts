@@ -1,6 +1,5 @@
 // Message routing: parse incoming Feishu events, dispatch to Claude
-import * as Lark from "@larksuiteoapi/node-sdk";
-import { config } from "@mishu/shared";
+import { larkClient as client } from "./client.js";
 import { sessionManager } from "./session-manager.js";
 import { runClaude } from "./claude-bridge.js";
 import {
@@ -9,14 +8,6 @@ import {
   buildProgressCard,
   buildErrorCard,
 } from "./card-builder.js";
-
-// Feishu client for sending messages
-const client = new Lark.Client({
-  appId: config.feishu.appId,
-  appSecret: config.feishu.appSecret,
-  appType: Lark.AppType.SelfBuild,
-  domain: Lark.Domain.Feishu,
-});
 
 // Throttle card updates to avoid Feishu rate limits (>= 1.5s between updates)
 const MIN_UPDATE_INTERVAL = 1500;
@@ -58,7 +49,7 @@ function extractText(message: { content?: string; mentions?: Array<{ key: string
     // Remove @mention placeholders like @_user_1
     if (message.mentions) {
       for (const m of message.mentions) {
-        text = text.replace(m.key, "").trim();
+        text = text.replace(m.key, "");
       }
     }
     return text.trim();
@@ -124,7 +115,7 @@ export async function handleMessage(data: {
             tools,
             status: "Processing...",
           }),
-        ).catch(() => {});
+        ).catch((e) => console.warn("[Mishu] Card update failed:", e));
       },
       onToolUse: (toolName) => {
         tools.push(toolName);
@@ -136,7 +127,7 @@ export async function handleMessage(data: {
             tools,
             status: `Using: ${toolName}`,
           }),
-        ).catch(() => {});
+        ).catch((e) => console.warn("[Mishu] Card update failed:", e));
       },
     });
 
