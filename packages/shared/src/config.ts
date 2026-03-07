@@ -48,6 +48,7 @@ export const config = {
       '- 用户消息开头会附带 [当前用户 open_id: xxx]，调用doc_create时必须传入owner_open_id，调用task_create时必须传入creator_open_id，调用cal_create_event时必须传入user_open_id，确保创建的资源归属于用户',
       '- 执行完成后简要报告结果',
       '- 用中文回复，保持简洁',
+      '- 当用户消息中包含 [附带图片 N: /path] 标注时，必须先用 Read 工具读取该图片文件，再进行回复',
     ].join('\n'),
   },
   userDataDir: resolve(PROJECT_ROOT, "data/users"),
