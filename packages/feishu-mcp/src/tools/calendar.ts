@@ -3,6 +3,25 @@ import { larkClient } from "../client.js";
 import { toUnixSeconds, unknownToolError } from "../utils.js";
 import type { ToolResult } from "@minister/shared";
 
+// Cache the Promise itself so concurrent callers share a single in-flight request
+let primaryCalendarIdPromise: Promise<string> | undefined;
+
+function getPrimaryCalendarId(): Promise<string> {
+  if (!primaryCalendarIdPromise) {
+    primaryCalendarIdPromise = (async () => {
+      const calList = await larkClient.calendar.v4.calendar.list({});
+      const cals = calList.data?.calendar_list;
+      if (cals?.length) {
+        const owned = cals.find((c) => c.role === "owner");
+        const writable = cals.find((c) => c.role === "writer");
+        return (owned || writable || cals[0]).calendar_id!;
+      }
+      return "primary";
+    })();
+  }
+  return primaryCalendarIdPromise;
+}
+
 export const calendarToolDefs = [
   {
     name: "cal_create_event",
@@ -110,15 +129,8 @@ export async function handleCalendarTool(
       const startTs = toUnixSeconds(args.start_time as string);
       const endTs = toUnixSeconds(args.end_time as string);
 
-      // Find a usable calendar (app has no "primary"; pick first owned/writable)
-      let calendarId = "primary";
-      const calList = await larkClient.calendar.v4.calendar.list({});
-      const cals = calList.data?.calendar_list;
-      if (cals?.length) {
-        const owned = cals.find((c) => c.role === "owner");
-        const writable = cals.find((c) => c.role === "writer");
-        calendarId = (owned || writable || cals[0]).calendar_id!;
-      }
+      // Use cached calendar ID (app has no "primary"; pick first owned/writable)
+      const calendarId = await getPrimaryCalendarId();
 
       const res = await larkClient.calendar.v4.calendarEvent.create({
         path: { calendar_id: calendarId },

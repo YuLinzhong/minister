@@ -11,7 +11,14 @@ import {
 } from "./card-builder.js";
 
 // Deduplicate events delivered more than once by Feishu SDK
-const processedMessages = new Set<string>();
+// Map value is the insertion timestamp; a single interval handles all expiry
+const processedMessages = new Map<string, number>();
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60_000;
+  for (const [id, ts] of processedMessages) {
+    if (ts < cutoff) processedMessages.delete(id);
+  }
+}, 60_000).unref();
 
 // Per-user serial processing queue: prevents concurrent Claude invocations for the same user
 const processingQueues = new Map<string, Promise<void>>();
@@ -105,8 +112,7 @@ export async function handleMessage(data: {
 
   // Deduplicate: skip if already processed within this session
   if (processedMessages.has(message.message_id)) return;
-  processedMessages.add(message.message_id);
-  setTimeout(() => processedMessages.delete(message.message_id), 10 * 60_000); // extend TTL to 10 min
+  processedMessages.set(message.message_id, Date.now());
 
   // Only handle text messages
   if (message.message_type !== "text") return;

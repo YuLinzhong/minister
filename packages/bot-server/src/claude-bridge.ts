@@ -1,8 +1,8 @@
 // Bridge to Claude Code CLI — spawn process and parse NDJSON stream
 import { spawn, type ChildProcess } from "node:child_process";
-import { resolve, dirname } from "node:path";
+import { resolve, relative, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { Session } from "@minister/shared";
 import { config } from "@minister/shared";
@@ -32,20 +32,19 @@ function ensureUserDir(userId: string): string {
     throw new Error(`Invalid userId format: ${userId}`);
   }
   const userDir = resolve(config.userDataDir, userId);
-  // Belt-and-suspenders: ensure resolved path stays inside the data dir
-  if (!userDir.startsWith(config.userDataDir + "/") && userDir !== config.userDataDir) {
+  // Belt-and-suspenders: use path.relative to catch traversal on any platform
+  const rel = relative(config.userDataDir, userDir);
+  if (rel.startsWith("..")) {
     throw new Error(`userId escapes data directory`);
   }
   mkdirSync(userDir, { recursive: true });
   return userDir;
 }
 
-// Read user-specific CLAUDE.md memory file
-function getUserMemory(userId: string): string {
-  const claudeMdPath = resolve(config.userDataDir, userId, "CLAUDE.md");
-  if (!existsSync(claudeMdPath)) return "";
+// Read user-specific CLAUDE.md memory file from an already-resolved userDir
+function getUserMemory(userDir: string): string {
   try {
-    return readFileSync(claudeMdPath, "utf-8").trim();
+    return readFileSync(resolve(userDir, "CLAUDE.md"), "utf-8").trim();
   } catch {
     return "";
   }
@@ -55,7 +54,7 @@ function getUserMemory(userId: string): string {
 function buildSystemPrompt(userId: string): string {
   const userDir = ensureUserDir(userId);
   const memoryPath = resolve(userDir, "CLAUDE.md");
-  const userMemory = getUserMemory(userId);
+  const userMemory = getUserMemory(userDir);
 
   let prompt = config.claude.systemPrompt;
 
@@ -77,14 +76,11 @@ function buildSystemPrompt(userId: string): string {
   return prompt;
 }
 
-// Silently delete a file — used to clean up temp MCP config on all exit paths
-function cleanupFile(path: string): void {
-  try { unlinkSync(path); } catch { /* already deleted */ }
-}
-
-// Write MCP config to a temp file (mode 0o600) to avoid exposing credentials in process args
-function writeMcpConfigFile(): string {
-  const content = JSON.stringify({
+// MCP config is static for the lifetime of the process — write once, reuse forever
+const MCP_CONFIG_PATH = resolve(tmpdir(), `minister-mcp-${process.pid}.json`);
+writeFileSync(
+  MCP_CONFIG_PATH,
+  JSON.stringify({
     mcpServers: {
       feishu: {
         command: "bun",
@@ -95,18 +91,19 @@ function writeMcpConfigFile(): string {
         },
       },
     },
-  });
-  const tmpPath = resolve(tmpdir(), `minister-mcp-${process.pid}-${Date.now()}.json`);
-  writeFileSync(tmpPath, content, { mode: 0o600 });
-  return tmpPath;
-}
+  }),
+  { mode: 0o600 },
+);
+const _cleanupMcpConfig = () => { try { unlinkSync(MCP_CONFIG_PATH); } catch { /* already gone */ } };
+process.on("exit", _cleanupMcpConfig);
+process.on("SIGTERM", () => { _cleanupMcpConfig(); process.exit(0); });
+process.on("SIGINT", () => { _cleanupMcpConfig(); process.exit(0); });
 
 export async function runClaude(
   prompt: string,
   session: Session,
   callbacks: BridgeCallbacks = {},
 ): Promise<BridgeResult> {
-  const mcpConfigPath = writeMcpConfigFile();
   const args = [
     "--print",
     "--permission-mode", "auto",
@@ -114,7 +111,7 @@ export async function runClaude(
     "--output-format", "stream-json",
     "--model", config.claude.model,
     "--system-prompt", buildSystemPrompt(session.userId),
-    "--mcp-config", mcpConfigPath,
+    "--mcp-config", MCP_CONFIG_PATH,
   ];
 
   if (session.conversationId) {
@@ -125,7 +122,9 @@ export async function runClaude(
   // without it, --mcp-config (variadic) swallows the prompt
   args.push("--", prompt);
 
-  console.log(`[Claude] Spawning: claude ${args.join(" ").slice(0, 100)}...`);
+  // Filter out --system-prompt value to avoid logging sensitive user memory content
+  const safeArgs = args.filter((_, i) => args[i - 1] !== "--system-prompt");
+  console.log(`[Claude] Spawning: claude ${safeArgs.join(" ").slice(0, 150)}...`);
 
   return new Promise((resolve, reject) => {
     const proc: ChildProcess = spawn("claude", args, {
@@ -192,16 +191,14 @@ export async function runClaude(
       }
     });
 
-    // Kill process and clean up if it runs too long
+    // Kill process if it runs too long
     const timeoutId = setTimeout(() => {
       proc.kill("SIGTERM");
-      cleanupFile(mcpConfigPath);
       reject(new Error(`Claude CLI timed out after ${CLAUDE_TIMEOUT_MS / 60_000} minutes`));
     }, CLAUDE_TIMEOUT_MS);
 
     proc.on("close", (code) => {
       clearTimeout(timeoutId);
-      cleanupFile(mcpConfigPath);
       console.log(`[Claude] Process exited with code ${code}, fullText length: ${fullText.length}`);
       // Process remaining buffer
       if (buffer.trim()) {
@@ -226,7 +223,6 @@ export async function runClaude(
 
     proc.on("error", (err) => {
       clearTimeout(timeoutId);
-      cleanupFile(mcpConfigPath);
       reject(err);
     });
   });
