@@ -26,13 +26,18 @@ export const documentToolDefs = [
   },
   {
     name: "doc_read",
-    description: "Read content of a Feishu document by document_id.",
+    description:
+      "Read content of a Feishu document. Accepts either a document_id or a Feishu document URL (e.g. https://xxx.feishu.cn/docx/TOKEN).",
     inputSchema: {
       type: "object" as const,
       properties: {
         document_id: { type: "string", description: "Document ID" },
+        url: {
+          type: "string",
+          description:
+            "Feishu document URL. Supports /docx/, /docs/, and /wiki/ paths.",
+        },
       },
-      required: ["document_id"],
     },
   },
   {
@@ -85,15 +90,53 @@ export async function handleDocumentTool(
         content: [
           {
             type: "text",
-            text: `Document created. document_id: ${docToken}, title: ${doc?.title}`,
+            text: `Document created. document_id: ${docToken}, title: ${doc?.title}, url: https://feishu.cn/docx/${docToken}`,
           },
         ],
       };
     }
 
     case "doc_read": {
+      let documentId = args.document_id as string | undefined;
+
+      // Extract document_id from URL if provided
+      if (!documentId && args.url) {
+        const match = (args.url as string).match(
+          /(?:feishu\.cn|larksuite\.com)\/(docx|docs|wiki)\/([A-Za-z0-9]+)/,
+        );
+        if (!match) {
+          return {
+            content: [{ type: "text", text: "Invalid Feishu document URL." }],
+            isError: true,
+          };
+        }
+        const [, docType, token] = match;
+        if (docType === "wiki") {
+          // Resolve wiki node token to actual document_id
+          const nodeRes = await larkClient.wiki.v2.space.getNode({
+            params: { token },
+          });
+          documentId = nodeRes.data?.node?.obj_token;
+          if (!documentId) {
+            return {
+              content: [{ type: "text", text: "Failed to resolve wiki document token." }],
+              isError: true,
+            };
+          }
+        } else {
+          documentId = token;
+        }
+      }
+
+      if (!documentId) {
+        return {
+          content: [{ type: "text", text: "Either document_id or url is required." }],
+          isError: true,
+        };
+      }
+
       const res = await larkClient.docx.v1.document.rawContent({
-        path: { document_id: args.document_id as string },
+        path: { document_id: documentId },
       });
       return {
         content: [
