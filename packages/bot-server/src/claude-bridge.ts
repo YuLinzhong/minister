@@ -20,6 +20,22 @@ interface BridgeResult {
   sessionId?: string;
 }
 
+// Build MCP config JSON with resolved env vars
+function buildMcpConfig(): string {
+  return JSON.stringify({
+    mcpServers: {
+      feishu: {
+        command: "bun",
+        args: ["run", "./packages/feishu-mcp/src/index.ts"],
+        env: {
+          FEISHU_APP_ID: config.feishu.appId,
+          FEISHU_APP_SECRET: config.feishu.appSecret,
+        },
+      },
+    },
+  });
+}
+
 export async function runClaude(
   prompt: string,
   session: Session,
@@ -27,9 +43,12 @@ export async function runClaude(
 ): Promise<BridgeResult> {
   const args = [
     "--print",
+    "--permission-mode", "auto",
     ...(config.claude.verbose ? ["--verbose"] : []),
     "--output-format", "stream-json",
     "--model", config.claude.model,
+    "--system-prompt", config.claude.systemPrompt,
+    "--mcp-config", buildMcpConfig(),
   ];
 
   if (session.conversationId) {
