@@ -29,6 +29,10 @@ packages/
 
 The bot server receives Feishu messages, spawns a Claude CLI subprocess with streaming JSON output, and renders real-time progress through interactive cards. Sessions are managed per user with a 30-minute TTL, supporting conversation continuity via Claude's `--resume` flag.
 
+### Per-User Memory
+
+Each user gets an isolated memory folder at `data/users/{open_id}/`, where Claude autonomously maintains a personal `CLAUDE.md` file. When a user expresses preferences, habits, or standing instructions (e.g. "remember I prefer Markdown reports"), Claude writes them to this file. On subsequent conversations — even after session expiry or service restarts — the stored preferences are automatically loaded into the system prompt, giving Claude persistent, cross-session knowledge of each user.
+
 ### MCP Tools
 
 The MCP server provides six tool categories for Claude to interact with Feishu:
@@ -133,6 +137,10 @@ packages/
 ```
 
 机器人服务接收飞书消息后，启动 Claude CLI 子进程进行流式 JSON 输出处理，并通过交互式卡片实时展示进度。每个用户的会话独立管理，30 分钟自动过期，通过 Claude 的 `--resume` 参数支持对话延续。
+
+### 用户记忆
+
+每个用户拥有独立的记忆文件夹 `data/users/{open_id}/`，Claude 会在对话中自主维护其中的 `CLAUDE.md` 文件。当用户表达个人偏好、工作习惯或常用指令时（比如"记住我喜欢 Markdown 格式的报告"），Claude 会将这些信息写入该文件。在后续对话中——即使会话过期或服务重启——已存储的偏好会自动加载到系统提示词中，让 Claude 对每个用户都具备持久的跨会话记忆能力。
 
 ### MCP 工具集
 
