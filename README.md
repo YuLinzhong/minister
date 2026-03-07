@@ -2,7 +2,7 @@
 
 <div align="center">
 
-https://github.com/zhu1090093659/minister/releases/download/v0.1.0/minister-intro.mp4
+[![观看介绍视频](https://img.shields.io/badge/Bilibili-观看介绍视频-00A1D6?style=for-the-badge&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1MLNwzUEje/)
 
 </div>
 
