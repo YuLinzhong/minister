@@ -31,5 +31,9 @@ COPY packages/shared/ packages/shared/
 COPY packages/bot-server/ packages/bot-server/
 COPY packages/feishu-mcp/ packages/feishu-mcp/
 COPY .claude/ .claude/
+COPY config/ config/
+COPY scripts/ scripts/
 
-CMD ["bun", "run", "packages/bot-server/src/index.ts"]
+RUN chmod +x scripts/docker-entrypoint.sh
+
+CMD ["sh", "scripts/docker-entrypoint.sh"]

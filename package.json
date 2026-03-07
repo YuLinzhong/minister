@@ -9,6 +9,7 @@
   "scripts": {
     "bot": "bun run packages/bot-server/src/index.ts",
     "mcp": "bun run packages/feishu-mcp/src/index.ts",
+    "generate-settings": "bun run scripts/generate-claude-settings.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

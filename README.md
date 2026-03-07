@@ -63,18 +63,26 @@ bun install
 
 ```bash
 cp config/.env.example .env
-# Edit .env with your credentials
+cp config/claude.env.example config/claude.env
+# Edit both files with your credentials
 ```
 
-Required variables:
+`.env` holds Feishu credentials:
 
 ```
 FEISHU_APP_ID=your_app_id
 FEISHU_APP_SECRET=your_app_secret
-ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-3. Run:
+`config/claude.env` holds all Claude Code settings — API key, base URL, model, proxy, and `settings.json` overrides. See `config/claude.env.example` for the full list.
+
+3. Generate `.claude/settings.json` (optional for local, automatic in Docker):
+
+```bash
+bun run generate-settings
+```
+
+4. Run:
 
 ```bash
 bun run bot     # Start bot server
@@ -87,7 +95,7 @@ bun run mcp     # Start MCP server (used by Claude CLI internally)
 docker compose up -d
 ```
 
-The Docker image is built on `oven/bun:1-alpine`, with Claude CLI installed at build time. Pass your environment variables via `.env` file.
+The Docker image is built on `oven/bun:1-alpine`, with Claude CLI installed at build time. On container startup, `.claude/settings.json` is auto-generated from `config/claude.env` and `.env`, so all Claude Code behavior (API endpoint, model, proxy, permissions, etc.) can be controlled purely through environment variables.
 
 ### Tech Stack
 
@@ -152,18 +160,26 @@ bun install
 
 ```bash
 cp config/.env.example .env
-# 编辑 .env 填入你的凭据
+cp config/claude.env.example config/claude.env
+# 分别编辑两个文件，填入对应凭据
 ```
 
-必填变量：
+`.env` 存放飞书凭据：
 
 ```
 FEISHU_APP_ID=your_app_id
 FEISHU_APP_SECRET=your_app_secret
-ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
-3. 启动：
+`config/claude.env` 存放所有 Claude Code 配置——API Key、接入地址、模型、代理、`settings.json` 覆盖项等。完整配置项见 `config/claude.env.example`。
+
+3. 生成 `.claude/settings.json`（本地可选，Docker 中自动执行）：
+
+```bash
+bun run generate-settings
+```
+
+4. 启动：
 
 ```bash
 bun run bot     # 启动机器人服务
@@ -176,7 +192,7 @@ bun run mcp     # 启动 MCP 服务（由 Claude CLI 内部调用）
 docker compose up -d
 ```
 
-Docker 镜像基于 `oven/bun:1-alpine` 构建，Claude CLI 在构建阶段自动安装。通过 `.env` 文件传入环境变量即可。
+Docker 镜像基于 `oven/bun:1-alpine` 构建，Claude CLI 在构建阶段自动安装。容器启动时会自动从 `config/claude.env` 和 `.env` 生成 `.claude/settings.json`，因此 Claude Code 的所有行为（API 端点、模型、代理、权限等）都可以通过环境变量控制。
 
 ### 技术栈
 

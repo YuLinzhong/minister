@@ -1,13 +1,14 @@
-// Load environment variables from .env file at project root
+// Load environment variables from .env and config/claude.env at project root
 import { resolve, dirname } from "node:path";
 import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const envPath = resolve(__dirname, "../../../.env");
+const PROJECT_ROOT = resolve(__dirname, "../../..");
 
-if (existsSync(envPath)) {
-  const content = readFileSync(envPath, "utf-8");
+function loadEnvFile(filePath: string): void {
+  if (!existsSync(filePath)) return;
+  const content = readFileSync(filePath, "utf-8");
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
@@ -18,6 +19,10 @@ if (existsSync(envPath)) {
     if (!process.env[key]) process.env[key] = val;
   }
 }
+
+// Load claude.env first (lower priority), then .env (higher priority, already set keys win)
+loadEnvFile(resolve(PROJECT_ROOT, "config/claude.env"));
+loadEnvFile(resolve(PROJECT_ROOT, ".env"));
 
 function required(key: string): string {
   const val = process.env[key];
