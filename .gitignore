@@ -11,3 +11,4 @@ config/claude.env
 *.log
 .claude/settings.local.json
 data/users/
+video/node_modules
