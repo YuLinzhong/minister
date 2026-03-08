@@ -41,8 +41,9 @@
 
 每个用户（私聊）和群聊都有独立的工作区，Claude 当前工作目录（CWD）即为该工作区，包含：
 
-- `CLAUDE.md`：个人/群组记忆与自定义 skill
+- `CLAUDE.md`：个人/群组记忆（偏好、习惯、常用指令）
 - `.claude/settings.json`：MCP 服务器配置与权限规则
+- `.claude/commands/`：个人 skill 目录，每个 `.md` 文件对应一个可调用的 slash command
 
 ### 安装 MCP
 
@@ -80,20 +81,16 @@
 
 ### 定义 Skill
 
-当用户请求定义 skill（如"记住我的周报格式"、"帮我建一个 PR Review skill"）时：
+当用户请求创建 skill（如"帮我建一个周报 skill"、"记住我的 PR Review 流程"）时，使用 Claude Code 原生 slash command 机制：
 
-1. 读取 `CLAUDE.md` 当前内容
-2. 在 `## My Skills` 区块下追加新 skill（若区块不存在则创建）：
+1. 与用户确认 skill 名称（英文，无空格，如 `weekly-report`）
+2. 将 skill 的完整指令写入 `.claude/commands/{name}.md`：
    ```markdown
-   ## My Skills
-
-   ### Skill 名称
-   [自然语言描述的指令、模板或工作流]
+   [自然语言描述的指令、模板或工作流，越详细越好]
    ```
-3. 写回 `CLAUDE.md`
-4. 告知用户：「Skill 已保存，**下次对话**起自动生效」
+3. 告知用户：「Skill `/{name}` 已创建，**当前对话**即可使用 `/{name}` 调用」
 
-Skill 可以是任何形式：输出格式模板、固定工作流步骤、常用提示词、角色定义等。
+Skill 可以是任何形式：输出格式模板、固定工作流步骤、常用提示词、角色定义等。用户在对话中输入 `/{name}` 即可触发。
 
 ---
 

@@ -15,19 +15,15 @@ const DEFAULT_USER_CLAUDE_MD = `# User Memory
 - Read existing content before writing to avoid duplicates
 - Only record preferences and instructions — not conversation content or temporary info
 
-## My Skills
+## Skills
 
-<!-- Claude will write your custom skills here when you ask. Example:
-
-### Weekly Report Format
-Always write my weekly reports in three sections: Completed / Next Week / Blockers.
--->
+<!-- Personal skills live in .claude/commands/*.md — each file is a slash command the user can invoke with /{name}. -->
 `;
 
 // Default CLAUDE.md for group chat workspaces — shared by all members of the chat
 const DEFAULT_GROUP_CLAUDE_MD = `# Group Workspace
 
-<!-- Shared memory and skills for this group chat. Auto-maintained by Claude. -->
+<!-- Shared memory for this group chat. Auto-maintained by Claude. -->
 
 ## Group Conventions
 
@@ -37,13 +33,9 @@ const DEFAULT_GROUP_CLAUDE_MD = `# Group Workspace
 - All meeting notes go into the shared Bitable
 -->
 
-## My Skills
+## Skills
 
-<!-- Claude will write shared skills and templates here when group members ask. Example:
-
-### Sprint Summary Template
-Summarize each sprint with: Goals / Achieved / Blockers / Next Sprint.
--->
+<!-- Group skills live in .claude/commands/*.md — each file is a slash command invoked with /{name}. -->
 `;
 
 interface UserSettings {
@@ -86,7 +78,7 @@ export function ensureUserWorktree(userId: string): string {
 
   if (!existsSync(settingsPath)) {
     // First visit — initialize directory structure
-    mkdirSync(resolve(worktreePath, ".claude"), { recursive: true });
+    mkdirSync(resolve(worktreePath, ".claude/commands"), { recursive: true });
 
     // Migrate legacy CLAUDE.md if it exists, otherwise write default template
     const legacyPath = resolve(config.userDataDir, userId, "CLAUDE.md");
