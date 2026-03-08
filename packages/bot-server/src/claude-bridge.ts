@@ -72,8 +72,9 @@ export async function runClaude(
   session: Session,
   callbacks: BridgeCallbacks = {},
 ): Promise<BridgeResult> {
-  // Resolve user's isolated worktree — creates it on first call
-  const worktreePath = ensureUserWorktree(session.userId);
+  // Group chats use the chatId as the shared workspace; private chats use the userId
+  const workspaceId = session.chatId ?? session.userId;
+  const worktreePath = ensureUserWorktree(workspaceId);
 
   const args = [
     "--print",

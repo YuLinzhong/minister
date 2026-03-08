@@ -4,10 +4,10 @@ import { resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { config } from "@minister/shared";
 
-// Default CLAUDE.md content — embeds memory management rules so Claude discovers them natively
-const DEFAULT_CLAUDE_MD = `# User Memory
+// Default CLAUDE.md for personal (private-chat) workspaces
+const DEFAULT_USER_CLAUDE_MD = `# User Memory
 
-<!-- Auto-maintained by Claude. Records user preferences, habits, and recurring instructions. -->
+<!-- Auto-maintained by Claude. Records personal preferences, habits, and recurring instructions. -->
 
 ## Writing Rules
 
@@ -15,6 +15,23 @@ const DEFAULT_CLAUDE_MD = `# User Memory
 - Read existing content before writing to avoid duplicates
 - Only record preferences and instructions — not conversation content or temporary info
 - Keep this file concise, under 50 lines
+`;
+
+// Default CLAUDE.md for group chat workspaces — shared by all members of the chat
+const DEFAULT_GROUP_CLAUDE_MD = `# Group Workspace
+
+<!-- Shared memory and skills for this group chat. Auto-maintained by Claude. -->
+
+## Content
+
+- Group-level conventions and preferences (e.g. "our team uses OKR format")
+- Shared skill definitions and templates available to all members
+- Group-specific workflows and standing instructions
+
+## Writing Rules
+
+- Write group-level preferences here when members collectively agree on them
+- Keep it concise, under 50 lines
 `;
 
 interface UserSettings {
@@ -70,7 +87,9 @@ export function ensureUserWorktree(userId: string): string {
       renameSync(legacyPath, legacyPath + ".migrated");
       console.log(`[worktree] Migrated legacy CLAUDE.md for user ${userId}`);
     } else {
-      writeFileSync(claudeMdPath, DEFAULT_CLAUDE_MD, { mode: 0o600 });
+      // Feishu group chat IDs start with "oc_", user IDs start with "ou_"
+      const isGroup = userId.startsWith("oc_");
+      writeFileSync(claudeMdPath, isGroup ? DEFAULT_GROUP_CLAUDE_MD : DEFAULT_USER_CLAUDE_MD, { mode: 0o600 });
     }
 
     // Write per-user settings.json (permission deny-rules only, no credentials)
