@@ -30,7 +30,7 @@ Technically, Minister exposes Feishu APIs to Claude via MCP, receives messages o
 | **Execution model** | Calls Feishu APIs directly — does the work for you | General-purpose task execution, not Feishu-native | Generates text and suggestions; you still have to act on it |
 | **Reasoning engine** | Claude Code CLI — Anthropic's production-grade agentic loop | LLM API + community-built ReAct loop | Conversational text generation, no persistent reasoning loop |
 | **Image understanding** | Native multimodal input — analyze screenshots, diagrams, and design files; mixed text+image messages auto-combined | Depends on the underlying LLM's vision capability; integration depth limited | Basic image recognition, constrained by platform |
-| **Per-user memory** | Each user gets an isolated `CLAUDE.md`; preferences persist across restarts | Shared memory store with no per-user isolation | Cleared at session end; no persistent memory |
+| **Per-user isolation** | Each user gets a fully isolated workspace (`CLAUDE.md` memory + personal MCP config); can add custom skills and third-party MCPs; filesystem-level access controls | Shared memory store, no per-user isolation | Cleared at session end; no persistent memory |
 | **Feishu focus** | Purpose-built for Feishu teams; every detail optimized for the Feishu ecosystem | General-purpose platform; Feishu is one of many supported channels | — |
 
 ### Architecture
@@ -44,9 +44,32 @@ packages/
 
 The bot server receives Feishu messages, spawns a Claude CLI subprocess with streaming JSON output, and renders real-time progress through interactive cards. Sessions are managed per user with a 30-minute TTL, supporting conversation continuity via Claude's `--resume` flag.
 
-### Per-User Memory
+### Personal Workspace
 
-Each user gets an isolated memory folder at `data/users/{open_id}/`, where Claude autonomously maintains a personal `CLAUDE.md` file. When a user expresses preferences, habits, or standing instructions (e.g. "remember I prefer Markdown reports"), Claude writes them to this file. On subsequent conversations — even after session expiry or service restarts — the stored preferences are automatically loaded into the system prompt, giving Claude persistent, cross-session knowledge of each user.
+Every user gets a fully isolated workspace at `data/worktrees/{open_id}/`, containing two core files:
+
+```
+data/worktrees/{open_id}/
+├── CLAUDE.md              # Personal memory — persists across sessions and restarts
+└── .claude/
+    └── settings.json      # Personal config — custom MCP servers, permissions, etc.
+```
+
+**Persistent memory**: When a user expresses preferences, habits, or standing instructions (e.g. "remember I like three-section weekly reports"), Claude writes them to `CLAUDE.md`. On every subsequent session — even after expiry or service restarts — Claude reads this file natively and applies it automatically.
+
+**Personal MCP and skills**: Each user has their own `.claude/settings.json` and can extend their own Claude experience through natural language:
+
+- Connect third-party MCP servers (GitHub, Jira, internal tools, etc.)
+- Define personal skills in `CLAUDE.md` (report templates, workflow shortcuts, prompt libraries)
+- Adjust permission policies for your own use case
+
+For example, you can tell Minister:
+
+> "Add GitHub MCP to my settings.json. My token is xxx."
+
+Minister will directly update your `settings.json`. The GitHub tools become available to you from the next conversation — with zero impact on any other user.
+
+**Security isolation**: Workspace directories are protected by filesystem-level permission deny rules and multi-layer system prompt guardrails that prohibit any cross-user read or write operations.
 
 ### MCP Tools
 

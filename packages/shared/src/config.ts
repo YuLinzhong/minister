@@ -42,7 +42,7 @@ export const config = {
   claude: {
     model: process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514",
     systemPrompt: process.env.CLAUDE_SYSTEM_PROMPT || loadPromptFile("system-prompt.md"),
-    userMemoryPrompt: loadPromptFile("user-memory-prompt.md"),
   },
   userDataDir: resolve(PROJECT_ROOT, "data/users"),
+  worktreeDir: resolve(PROJECT_ROOT, "data/worktrees"),
 } as const;

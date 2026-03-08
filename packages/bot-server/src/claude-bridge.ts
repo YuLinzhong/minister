@@ -1,14 +1,39 @@
 // Bridge to Claude Code CLI — spawn process and parse NDJSON stream
 import { spawn, type ChildProcess } from "node:child_process";
-import { resolve, relative, dirname } from "node:path";
+import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
+import { writeFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { Session } from "@minister/shared";
 import { config } from "@minister/shared";
+import { ensureUserWorktree } from "./worktree-manager.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "../../..");
+
+// MCP config is static for the lifetime of the process — write once, reuse forever.
+// Kept as a temp file (not in the worktree) so Claude cannot read raw credentials.
+const MCP_CONFIG_PATH = resolve(tmpdir(), `minister-mcp-${process.pid}.json`);
+writeFileSync(
+  MCP_CONFIG_PATH,
+  JSON.stringify({
+    mcpServers: {
+      feishu: {
+        command: "bun",
+        args: ["run", resolve(PROJECT_ROOT, "packages/feishu-mcp/src/index.ts")],
+        env: {
+          FEISHU_APP_ID: config.feishu.appId,
+          FEISHU_APP_SECRET: config.feishu.appSecret,
+        },
+      },
+    },
+  }),
+  { mode: 0o600 },
+);
+const _cleanupMcpConfig = () => { try { unlinkSync(MCP_CONFIG_PATH); } catch { /* already gone */ } };
+process.on("exit", _cleanupMcpConfig);
+process.on("SIGTERM", () => { _cleanupMcpConfig(); process.exit(0); });
+process.on("SIGINT", () => { _cleanupMcpConfig(); process.exit(0); });
 
 // Maximum time allowed for a single Claude CLI invocation
 const CLAUDE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -42,83 +67,21 @@ interface BridgeResult {
   sessionId?: string;
 }
 
-// Ensure per-user data directory exists and return its absolute path
-function ensureUserDir(userId: string): string {
-  // Guard against path traversal: allow only safe characters found in Feishu IDs
-  if (!/^[\w\-:]{1,200}$/.test(userId)) {
-    throw new Error(`Invalid userId format: ${userId}`);
-  }
-  const userDir = resolve(config.userDataDir, userId);
-  // Belt-and-suspenders: use path.relative to catch traversal on any platform
-  const rel = relative(config.userDataDir, userDir);
-  if (rel.startsWith("..")) {
-    throw new Error(`userId escapes data directory`);
-  }
-  mkdirSync(userDir, { recursive: true });
-  return userDir;
-}
-
-// Read user-specific CLAUDE.md memory file from an already-resolved userDir
-function getUserMemory(userDir: string): string {
-  try {
-    return readFileSync(resolve(userDir, "CLAUDE.md"), "utf-8").trim();
-  } catch {
-    return "";
-  }
-}
-
-// Build system prompt with per-user memory injected
-function buildSystemPrompt(userId: string): string {
-  const userDir = ensureUserDir(userId);
-  const memoryPath = resolve(userDir, "CLAUDE.md");
-  const userMemory = getUserMemory(userDir);
-
-  let prompt = config.claude.systemPrompt;
-
-  prompt += "\n\n" + config.claude.userMemoryPrompt.replace("{{memoryPath}}", memoryPath);
-
-  if (userMemory) {
-    prompt += `\n\n# 当前用户的个人记忆\n${userMemory}`;
-  }
-
-  return prompt;
-}
-
-// MCP config is static for the lifetime of the process — write once, reuse forever
-const MCP_CONFIG_PATH = resolve(tmpdir(), `minister-mcp-${process.pid}.json`);
-writeFileSync(
-  MCP_CONFIG_PATH,
-  JSON.stringify({
-    mcpServers: {
-      feishu: {
-        command: "bun",
-        args: ["run", "./packages/feishu-mcp/src/index.ts"],
-        env: {
-          FEISHU_APP_ID: config.feishu.appId,
-          FEISHU_APP_SECRET: config.feishu.appSecret,
-        },
-      },
-    },
-  }),
-  { mode: 0o600 },
-);
-const _cleanupMcpConfig = () => { try { unlinkSync(MCP_CONFIG_PATH); } catch { /* already gone */ } };
-process.on("exit", _cleanupMcpConfig);
-process.on("SIGTERM", () => { _cleanupMcpConfig(); process.exit(0); });
-process.on("SIGINT", () => { _cleanupMcpConfig(); process.exit(0); });
-
 export async function runClaude(
   prompt: string,
   session: Session,
   callbacks: BridgeCallbacks = {},
 ): Promise<BridgeResult> {
+  // Resolve user's isolated worktree — creates it on first call
+  const worktreePath = ensureUserWorktree(session.userId);
+
   const args = [
     "--print",
     "--permission-mode", "auto",
     "--verbose",
     "--output-format", "stream-json",
     "--model", config.claude.model,
-    "--system-prompt", buildSystemPrompt(session.userId),
+    "--system-prompt", config.claude.systemPrompt,
     "--mcp-config", MCP_CONFIG_PATH,
   ];
 
@@ -127,16 +90,16 @@ export async function runClaude(
   }
 
   // "--" separates options from positional args;
-  // without it, --mcp-config (variadic) swallows the prompt
+  // without it, variadic flags may swallow the prompt
   args.push("--", prompt);
 
-  // Filter out --system-prompt value to avoid logging sensitive user memory content
+  // Filter out --system-prompt value to avoid logging sensitive content
   const safeArgs = args.filter((_, i) => args[i - 1] !== "--system-prompt");
   console.log(`[Claude] Spawning: claude ${safeArgs.join(" ").slice(0, 150)}...`);
 
   return new Promise((resolve, reject) => {
     const proc: ChildProcess = spawn("claude", args, {
-      cwd: PROJECT_ROOT,
+      cwd: worktreePath,
       stdio: ["ignore", "pipe", "pipe"],
     });
     console.log(`[Claude] Process spawned, pid: ${proc.pid}`);
