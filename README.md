@@ -18,7 +18,7 @@
 
 丞相为每位同事维护专属记忆。你说过"我的周报喜欢分三段写"，它就记住了，下次直接照做。张三的习惯是张三的，李四的偏好是李四的，互不干扰。会话断了、服务重启了，记忆都还在。
 
-底层，丞相通过 MCP 协议将飞书 API 暴露给 Claude Code，让 AI 拥有真正的执行力而不只是生成文本。整个项目用 TypeScript 写成，Bun 驱动，Docker 一键部署。
+底层，丞相通过 MCP 协议将飞书 API 暴露给 AI 引擎，让 AI 拥有真正的执行力而不只是生成文本。支持 Claude Code 和 OpenAI Codex 双引擎，通过一个环境变量即可切换。整个项目用 TypeScript 写成，Bun 驱动，Docker 一键部署。
 
 ---
 
@@ -26,7 +26,7 @@
 
 丞相是一个开源的飞书 AI 助手框架。你在飞书群里或私聊中 @ 它，背后的 Claude 会理解你的意图并直接行动：帮你发消息、建任务、写文档、排日程、查多维表格。不是给你一段文字让你自己去操作，而是它替你把事情办了。
 
-技术层面，丞相通过 MCP 协议将飞书 API 暴露给 Claude，WebSocket 长连接接收消息，流式卡片实时展示处理进度。整个项目用 TypeScript 单体仓库组织，Bun 驱动，Docker 一键部署。
+技术层面，丞相通过 MCP 协议将飞书 API 暴露给 AI 引擎（支持 Claude Code 和 OpenAI Codex 双引擎切换），WebSocket 长连接接收消息，流式卡片实时展示处理进度。整个项目用 TypeScript 单体仓库组织，Bun 驱动，Docker 一键部署。
 
 ### 为什么选丞相？
 
@@ -34,7 +34,7 @@
 |--------|------|----------|------------|
 | **飞书功能覆盖** | 6 类 20 个原生工具，消息、任务、文档、日历、多维表格、通讯录全栈覆盖 | 飞书为近期新增频道，工具以基础消息收发为主 | 可操作范围受平台策略约束 |
 | **执行方式** | 直接调用飞书 API，真正替你把事情办完 | 通用任务执行，飞书专项能力有限 | 生成文字和建议，需用户自行操作 |
-| **推理引擎** | Claude Code CLI — Anthropic 工业级 agentic loop | LLM API + 社区自研 ReAct 循环 | 对话式文本生成，无持续推理循环 |
+| **推理引擎** | 双引擎可选：Claude Code CLI（Anthropic 工业级 agentic loop）或 OpenAI Codex CLI，一个环境变量切换 | LLM API + 社区自研 ReAct 循环 | 对话式文本生成，无持续推理循环 |
 | **图片理解** | 原生支持图片输入，可识图、看截图、分析设计稿，图文混发自动合并处理 | 依赖所接入 LLM 的视觉能力，集成深度有限 | 支持基础识图，能力受平台限制 |
 | **用户隔离与个性化** | 每人独立工作区（`CLAUDE.md` 记忆 + 专属 MCP 配置），可自建 skill 和接入第三方 MCP，偏好互不干扰，文件系统权限保护 | 全局记忆存储，无用户级隔离 | 会话结束即清空，无持久记忆 |
 | **飞书场景专注度** | 为飞书团队专属打造，每个细节都针对飞书生态优化 | 通用平台，飞书是众多支持频道之一 | — |
@@ -48,7 +48,7 @@ packages/
   feishu-mcp/    MCP 工具服务，向 Claude 暴露飞书 API
 ```
 
-机器人服务接收飞书消息后，启动 Claude CLI 子进程进行流式 JSON 输出处理，并通过交互式卡片实时展示进度。每个用户的会话独立管理，30 分钟自动过期，通过 Claude 的 `--resume` 参数支持对话延续。
+机器人服务接收飞书消息后，启动 AI 引擎子进程（Claude Code 或 Codex CLI，由 `ENGINE_TYPE` 环境变量决定）进行流式 JSON 输出处理，并通过交互式卡片实时展示进度。每个用户的会话独立管理，30 分钟自动过期，支持对话延续。
 
 ### 个人工作区
 
@@ -94,8 +94,9 @@ MCP 服务提供六大类工具，供 Claude 与飞书进行交互：
 
 - [Bun](https://bun.sh/) v1.x
 - 一个飞书自建应用（在 [open.feishu.cn](https://open.feishu.cn) 创建）
-- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code)（Docker 部署时自动安装）
-- Anthropic API Key
+- AI 引擎二选一：
+  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) + Anthropic API Key（默认）
+  - [Codex CLI](https://codex.openai.com/) + OpenAI API Key
 
 ### 飞书应用配置
 
@@ -132,6 +133,15 @@ FEISHU_APP_SECRET=your_app_secret
 
 `config/claude.env` 存放所有 Claude Code 配置——API Key、接入地址、模型、代理、`settings.json` 覆盖项等。完整配置项见 `config/claude.env.example`。
 
+如需使用 Codex 引擎，在 `.env` 中额外设置：
+
+```
+ENGINE_TYPE=codex
+OPENAI_API_KEY=your_openai_api_key
+```
+
+并编辑 `config/config.toml` 配置模型和 Provider（参考文件内注释）。
+
 3. 生成 `.claude/settings.json`（本地可选，Docker 中自动执行）：
 
 ```bash
@@ -151,7 +161,7 @@ bun run mcp     # 启动 MCP 服务（由 Claude CLI 内部调用）
 docker compose up -d
 ```
 
-Docker 镜像基于 `oven/bun:1-debian` 构建，Claude CLI 在构建阶段自动安装。容器启动时会自动从 `config/claude.env` 和 `.env` 生成 `.claude/settings.json`，因此 Claude Code 的所有行为（API 端点、模型、代理、权限等）都可以通过环境变量控制。
+Docker 镜像基于 `oven/bun:1-debian` 构建，Claude CLI 在构建阶段自动安装。容器启动时会根据 `ENGINE_TYPE` 自动完成配置——Claude 引擎生成 `.claude/settings.json`，Codex 引擎则将 `config/config.toml` 写入 `~/.codex/config.toml` 并附加 MCP 服务定义。所有引擎行为均可通过环境变量控制。
 
 ### 技术栈
 

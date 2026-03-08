@@ -12,7 +12,7 @@ Works for a ten-person team splitting the busywork, or a solo founder who needs 
 
 Minister maintains dedicated memory for each team member. Tell it "I like my weekly reports in three sections", and it remembers — just for you. Everyone's preferences stay separate, persisting across sessions and restarts.
 
-Under the hood, Minister exposes Feishu APIs to Claude Code via MCP (Model Context Protocol), giving the AI real execution power beyond text generation. Written in TypeScript, powered by Bun, deployable with a single Docker command.
+Under the hood, Minister exposes Feishu APIs to the AI engine via MCP (Model Context Protocol), giving it real execution power beyond text generation. It supports dual engines — Claude Code and OpenAI Codex — switchable with a single environment variable. Written in TypeScript, powered by Bun, deployable with a single Docker command.
 
 ---
 
@@ -20,7 +20,7 @@ Under the hood, Minister exposes Feishu APIs to Claude Code via MCP (Model Conte
 
 Minister is an open-source Feishu AI assistant framework. Mention it in a group chat or DM, and the Claude behind it understands your intent and acts: sends messages, creates tasks, writes docs, schedules events, queries Bitable. Not a wall of text for you to act on — it handles things for you.
 
-Technically, Minister exposes Feishu APIs to Claude via MCP, receives messages over a WebSocket long-connection, and displays real-time progress through streaming cards. The project is organized as a TypeScript monorepo, powered by Bun, and deployable with a single Docker command.
+Technically, Minister exposes Feishu APIs to the AI engine (supporting both Claude Code and OpenAI Codex as switchable backends) via MCP, receives messages over a WebSocket long-connection, and displays real-time progress through streaming cards. The project is organized as a TypeScript monorepo, powered by Bun, and deployable with a single Docker command.
 
 ### Why Minister?
 
@@ -28,7 +28,7 @@ Technically, Minister exposes Feishu APIs to Claude via MCP, receives messages o
 |---|----------|----------|--------------------|
 | **Feishu tool coverage** | 6 categories, 20 native tools — messaging, tasks, docs, calendar, Bitable, and contacts | Feishu added recently as a new channel; tooling limited to basic messaging | Constrained by platform policies |
 | **Execution model** | Calls Feishu APIs directly — does the work for you | General-purpose task execution, not Feishu-native | Generates text and suggestions; you still have to act on it |
-| **Reasoning engine** | Claude Code CLI — Anthropic's production-grade agentic loop | LLM API + community-built ReAct loop | Conversational text generation, no persistent reasoning loop |
+| **Reasoning engine** | Dual-engine: Claude Code CLI (Anthropic's production-grade agentic loop) or OpenAI Codex CLI — switchable via one env var | LLM API + community-built ReAct loop | Conversational text generation, no persistent reasoning loop |
 | **Image understanding** | Native multimodal input — analyze screenshots, diagrams, and design files; mixed text+image messages auto-combined | Depends on the underlying LLM's vision capability; integration depth limited | Basic image recognition, constrained by platform |
 | **Per-user isolation** | Each user gets a fully isolated workspace (`CLAUDE.md` memory + personal MCP config); can add custom skills and third-party MCPs; filesystem-level access controls | Shared memory store, no per-user isolation | Cleared at session end; no persistent memory |
 | **Feishu focus** | Purpose-built for Feishu teams; every detail optimized for the Feishu ecosystem | General-purpose platform; Feishu is one of many supported channels | — |
@@ -42,7 +42,7 @@ packages/
   feishu-mcp/    MCP tool server exposing Feishu APIs to Claude
 ```
 
-The bot server receives Feishu messages, spawns a Claude CLI subprocess with streaming JSON output, and renders real-time progress through interactive cards. Sessions are managed per user with a 30-minute TTL, supporting conversation continuity via Claude's `--resume` flag.
+The bot server receives Feishu messages, spawns an AI engine subprocess (Claude Code or Codex CLI, determined by the `ENGINE_TYPE` env var) with streaming JSON output, and renders real-time progress through interactive cards. Sessions are managed per user with a 30-minute TTL, supporting conversation continuity.
 
 ### Personal Workspace
 
@@ -88,8 +88,9 @@ The MCP server provides six tool categories for Claude to interact with Feishu:
 
 - [Bun](https://bun.sh/) v1.x
 - A Feishu custom app (from [open.feishu.cn](https://open.feishu.cn))
-- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) installed (automatically installed in Docker)
-- An Anthropic API key
+- One of the following AI engines:
+  - [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) + Anthropic API key (default)
+  - [Codex CLI](https://codex.openai.com/) + OpenAI API key
 
 ### Feishu App Setup
 
@@ -126,6 +127,15 @@ FEISHU_APP_SECRET=your_app_secret
 
 `config/claude.env` holds all Claude Code settings — API key, base URL, model, proxy, and `settings.json` overrides. See `config/claude.env.example` for the full list.
 
+To use the Codex engine instead, add to `.env`:
+
+```
+ENGINE_TYPE=codex
+OPENAI_API_KEY=your_openai_api_key
+```
+
+Then edit `config/config.toml` to configure the model and provider (see comments in that file).
+
 3. Generate `.claude/settings.json` (optional for local, automatic in Docker):
 
 ```bash
@@ -145,7 +155,7 @@ bun run mcp     # Start MCP server (used by Claude CLI internally)
 docker compose up -d
 ```
 
-The Docker image is built on `oven/bun:1-debian`, with Claude CLI installed at build time. On container startup, `.claude/settings.json` is auto-generated from `config/claude.env` and `.env`, so all Claude Code behavior (API endpoint, model, proxy, permissions, etc.) can be controlled purely through environment variables.
+The Docker image is built on `oven/bun:1-debian`, with Claude CLI installed at build time. On container startup, configuration is auto-generated based on `ENGINE_TYPE` — for Claude, `.claude/settings.json` is created from `config/claude.env`; for Codex, `config/config.toml` is copied to `~/.codex/config.toml` with MCP server definitions appended. All engine behavior can be controlled purely through environment variables.
 
 ### Tech Stack
 
