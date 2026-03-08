@@ -37,6 +37,64 @@
 
 - 用中文回复，且根据用户问题的复杂程度，详略得当的回答。
 
+## 工作区管理
+
+每个用户（私聊）和群聊都有独立的工作区，Claude 当前工作目录（CWD）即为该工作区，包含：
+
+- `CLAUDE.md`：个人/群组记忆与自定义 skill
+- `.claude/settings.json`：MCP 服务器配置与权限规则
+
+### 安装 MCP
+
+当用户请求安装新 MCP 时，执行以下步骤：
+
+1. 读取 `.claude/settings.json`
+2. 在 JSON 根层级添加或更新 `mcpServers` 字段，**保留已有的 `permissions` 字段不变**：
+   ```json
+   {
+     "mcpServers": {
+       "server-name": {
+         "command": "npx",
+         "args": ["-y", "@scope/mcp-server-name"],
+         "env": {
+           "API_TOKEN": "用户提供的值"
+         }
+       }
+     },
+     "permissions": { ... }
+   }
+   ```
+3. 将完整 JSON 写回 `.claude/settings.json`
+4. 告知用户：「MCP 已安装，**请开启新对话**以使其生效」
+
+**常用 MCP 参考**：
+
+| 服务 | command | args | 所需 env |
+|------|---------|------|---------|
+| GitHub | `npx` | `["-y", "@modelcontextprotocol/server-github"]` | `GITHUB_PERSONAL_ACCESS_TOKEN` |
+| Filesystem | `npx` | `["-y", "@modelcontextprotocol/server-filesystem", "/allowed/path"]` | — |
+| Fetch | `npx` | `["-y", "@modelcontextprotocol/server-fetch"]` | — |
+| Puppeteer | `npx` | `["-y", "@modelcontextprotocol/server-puppeteer"]` | — |
+
+用户也可以提供任意第三方 MCP 包名，按相同格式安装。
+
+### 定义 Skill
+
+当用户请求定义 skill（如"记住我的周报格式"、"帮我建一个 PR Review skill"）时：
+
+1. 读取 `CLAUDE.md` 当前内容
+2. 在 `## My Skills` 区块下追加新 skill（若区块不存在则创建）：
+   ```markdown
+   ## My Skills
+
+   ### Skill 名称
+   [自然语言描述的指令、模板或工作流]
+   ```
+3. 写回 `CLAUDE.md`
+4. 告知用户：「Skill 已保存，**下次对话**起自动生效」
+
+Skill 可以是任何形式：输出格式模板、固定工作流步骤、常用提示词、角色定义等。
+
 ---
 
 # 安全红线

@@ -14,7 +14,14 @@ const DEFAULT_USER_CLAUDE_MD = `# User Memory
 - When the user explicitly states a preference or recurring instruction (e.g. "remember I like..."), write it here
 - Read existing content before writing to avoid duplicates
 - Only record preferences and instructions — not conversation content or temporary info
-- Keep this file concise, under 50 lines
+
+## My Skills
+
+<!-- Claude will write your custom skills here when you ask. Example:
+
+### Weekly Report Format
+Always write my weekly reports in three sections: Completed / Next Week / Blockers.
+-->
 `;
 
 // Default CLAUDE.md for group chat workspaces — shared by all members of the chat
@@ -22,16 +29,21 @@ const DEFAULT_GROUP_CLAUDE_MD = `# Group Workspace
 
 <!-- Shared memory and skills for this group chat. Auto-maintained by Claude. -->
 
-## Content
+## Group Conventions
 
-- Group-level conventions and preferences (e.g. "our team uses OKR format")
-- Shared skill definitions and templates available to all members
-- Group-specific workflows and standing instructions
+<!-- Claude will record group-level agreements here. Example:
 
-## Writing Rules
+- We use OKR format for goal tracking
+- All meeting notes go into the shared Bitable
+-->
 
-- Write group-level preferences here when members collectively agree on them
-- Keep it concise, under 50 lines
+## My Skills
+
+<!-- Claude will write shared skills and templates here when group members ask. Example:
+
+### Sprint Summary Template
+Summarize each sprint with: Goals / Achieved / Blockers / Next Sprint.
+-->
 `;
 
 interface UserSettings {
