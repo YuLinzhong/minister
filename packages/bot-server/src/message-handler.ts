@@ -2,7 +2,7 @@
 import { resolve } from "node:path";
 import { unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { larkClient as client, botOpenId } from "./client.js";
+import { larkClient as client, getBotOpenId } from "./client.js";
 import { sessionManager } from "./session-manager.js";
 import { runEngine, engineName, containsSensitiveContent, SENSITIVE_CONTENT_ERROR } from "./engine-bridge.js";
 import {
@@ -17,7 +17,7 @@ import {
 // Map value is the insertion timestamp; a single interval handles all expiry
 const processedMessages = new Map<string, number>();
 setInterval(() => {
-  const cutoff = Date.now() - 10 * 60_000;
+  const cutoff = Date.now() - 30 * 60_000;
   for (const [id, ts] of processedMessages) {
     if (ts < cutoff) processedMessages.delete(id);
   }
@@ -266,7 +266,7 @@ async function processCombinedMessages(
 // --- Public entry point ---
 
 // Reject messages older than this threshold to prevent re-processing after restart/reconnect
-const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_MESSAGE_AGE_MS = 30 * 60 * 1000; // 30 minutes
 
 // Supported message types (text / image / post rich-text)
 const SUPPORTED_TYPES = new Set(["text", "image", "post"]);
@@ -295,7 +295,7 @@ export async function handleMessage(data: {
   // In group chat, only respond when the bot itself is @mentioned
   if (message.chat_type === "group") {
     if (!message.mentions?.length) return;
-    const myOpenId = await botOpenId;
+    const myOpenId = await getBotOpenId();
     if (!myOpenId || !message.mentions.some((m) => m.id.open_id === myOpenId)) return;
   }
 

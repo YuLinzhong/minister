@@ -44,14 +44,15 @@ export async function handleContactTool(
 ): Promise<ToolResult> {
   switch (name) {
     case "contact_search": {
-      const res = await larkClient.search.v2.user.create({
+      // SDK types don't expose search.v2.user, but the API endpoint exists
+      const res = await (larkClient as any).search.v2.user.create({
         params: {
           page_size: (args.page_size as number) || 10,
           user_id_type: "open_id",
         },
         data: { query: args.query as string },
       });
-      const users = (res.data?.items ?? []).map((u) => ({
+      const users = (res.data?.items ?? []).map((u: any) => ({
         open_id: u.user_id,
         name: u.name,
         department: u.department?.name,

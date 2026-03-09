@@ -83,6 +83,46 @@ export const bitableToolDefs = [
       required: ["app_token", "table_id", "record_id", "fields"],
     },
   },
+  {
+    name: "bitable_create_table",
+    description:
+      "Create a new data table with custom fields (columns) inside a Bitable app.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string", description: "Bitable app token" },
+        name: { type: "string", description: "Table name" },
+        fields: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              field_name: { type: "string", description: "Field/column name" },
+              type: {
+                type: "number",
+                description:
+                  "Field type: 1=Text, 2=Number, 3=SingleSelect, 4=MultiSelect, 5=DateTime, 7=Checkbox, 11=User, 13=Phone, 15=Url, 22=Location",
+              },
+            },
+            required: ["field_name", "type"],
+          },
+          description: "Array of field definitions for the table columns",
+        },
+      },
+      required: ["app_token", "name", "fields"],
+    },
+  },
+  {
+    name: "bitable_list_tables",
+    description: "List all data tables in a Bitable app to get their table IDs.",
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        app_token: { type: "string", description: "Bitable app token" },
+      },
+      required: ["app_token"],
+    },
+  },
 ];
 
 export async function handleBitableTool(
@@ -102,7 +142,7 @@ export async function handleBitableTool(
         content: [
           {
             type: "text",
-            text: `Bitable created. app_token: ${app?.app_token}, name: ${app?.name}`,
+            text: `Bitable created. app_token: ${app?.app_token}, default_table_id: ${app?.default_table_id}, name: ${app?.name}, url: ${app?.url}`,
           },
         ],
       };
@@ -114,7 +154,7 @@ export async function handleBitableTool(
           app_token: args.app_token as string,
           table_id: args.table_id as string,
         },
-        data: { fields: args.fields as Record<string, unknown> },
+        data: { fields: args.fields as any },
       });
       return {
         content: [
@@ -154,7 +194,7 @@ export async function handleBitableTool(
           table_id: args.table_id as string,
           record_id: args.record_id as string,
         },
-        data: { fields: args.fields as Record<string, unknown> },
+        data: { fields: args.fields as any },
       });
       return {
         content: [
@@ -163,6 +203,46 @@ export async function handleBitableTool(
             text: `Record ${args.record_id} updated successfully.`,
           },
         ],
+      };
+    }
+
+    case "bitable_create_table": {
+      const fields = args.fields as Array<{
+        field_name: string;
+        type: number;
+      }>;
+      const res = await larkClient.bitable.v1.appTable.create({
+        path: { app_token: args.app_token as string },
+        data: {
+          table: {
+            name: args.name as string,
+            fields: fields.map((f) => ({
+              field_name: f.field_name,
+              type: f.type,
+            })),
+          },
+        },
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Table created. table_id: ${res.data?.table_id}, fields: ${(res.data?.field_id_list ?? []).join(", ")}`,
+          },
+        ],
+      };
+    }
+
+    case "bitable_list_tables": {
+      const res = await larkClient.bitable.v1.appTable.list({
+        path: { app_token: args.app_token as string },
+      });
+      const tables = (res.data?.items ?? []).map((t) => ({
+        table_id: t.table_id,
+        name: t.name,
+      }));
+      return {
+        content: [{ type: "text", text: JSON.stringify(tables, null, 2) }],
       };
     }
 

@@ -38,7 +38,7 @@ console.log(`[Engine] Using ${adapter.name} engine`);
 // ---------------------------------------------------------------------------
 
 // Maximum time allowed for a single CLI invocation
-const ENGINE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const ENGINE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
 export interface BridgeCallbacks {
   // Return false to abort the process immediately

@@ -5,6 +5,7 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolResult } from "@minister/shared";
 import { messageToolDefs, handleMessageTool } from "./tools/message.js";
 import { taskToolDefs, handleTaskTool } from "./tools/task.js";
@@ -23,8 +24,9 @@ const allTools = [
 ];
 
 // Build a router map: tool name -> handler function
+type ToolDef = { name: string; description: string; inputSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] } };
 const toolModules: Array<{
-  defs: typeof messageToolDefs;
+  defs: readonly ToolDef[];
   handler: (name: string, args: Record<string, unknown>) => Promise<ToolResult>;
 }> = [
   { defs: messageToolDefs, handler: handleMessageTool },
@@ -52,7 +54,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: allTools,
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
+server.setRequestHandler(CallToolRequestSchema, async (request, _extra): Promise<CallToolResult> => {
   const { name, arguments: args } = request.params;
   const handler = toolHandlers.get(name);
   if (!handler) {

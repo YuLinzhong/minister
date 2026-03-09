@@ -1,7 +1,13 @@
 // P1: Document tools — create, read, update
 import { larkClient } from "../client.js";
 import { unknownToolError } from "../utils.js";
-import { markdownToBlocks } from "../markdown-parser.js";
+import {
+  markdownToBlocks,
+  isTableMarker,
+  getTableData,
+  buildCellTextBlock,
+  BlockType,
+} from "../markdown-parser.js";
 import type { ToolResult } from "@minister/shared";
 
 export const documentToolDefs = [
@@ -146,24 +152,93 @@ export async function handleDocumentTool(
     }
 
     case "doc_update": {
-      // Parse markdown into structured Feishu document blocks
+      const documentId = args.document_id as string;
       const content = args.content as string;
-      const children = markdownToBlocks(content);
-      await larkClient.docx.v1.documentBlockChildren.create({
-        path: {
-          document_id: args.document_id as string,
-          block_id: args.document_id as string, // root block ID equals document ID
-        },
-        data: {
-          children: children as any,
-          index: -1,
-        },
-      });
+      const allBlocks = markdownToBlocks(content);
+
+      // Split blocks into batches: regular blocks get created together,
+      // table markers require multi-step API calls.
+      let regularBatch: Record<string, unknown>[] = [];
+
+      const flushRegular = async () => {
+        if (regularBatch.length === 0) return;
+        await larkClient.docx.v1.documentBlockChildren.create({
+          path: { document_id: documentId, block_id: documentId },
+          data: { children: regularBatch as any, index: -1 },
+        });
+        regularBatch = [];
+      };
+
+      for (const block of allBlocks) {
+        if (!isTableMarker(block)) {
+          regularBatch.push(block);
+          continue;
+        }
+
+        // Flush any accumulated regular blocks first
+        await flushRegular();
+
+        // Create table block via multi-step process
+        const tableData = getTableData(block);
+        const rowSize = tableData.rows.length + 1; // +1 for header row
+        const columnSize = tableData.headers.length;
+
+        // Step 1: Create the table block (cells are auto-generated)
+        const tableRes =
+          await larkClient.docx.v1.documentBlockChildren.create({
+            path: { document_id: documentId, block_id: documentId },
+            data: {
+              children: [
+                {
+                  block_type: BlockType.Table,
+                  table: {
+                    property: {
+                      row_size: rowSize,
+                      column_size: columnSize,
+                      header_row: true,
+                    },
+                  },
+                },
+              ] as any,
+              index: -1,
+            },
+          });
+
+        // Step 2: Get the created table block and its cell children
+        const tableBlock = tableRes.data?.children?.[0];
+        const cellIds: string[] =
+          (tableBlock as any)?.table?.cells ?? [];
+
+        if (cellIds.length === 0) continue;
+
+        // Step 3: Fill each cell with text content (parallel)
+        // Cells are laid out row-by-row: [row0col0, row0col1, ..., row1col0, ...]
+        const allCellTexts = [
+          ...tableData.headers,
+          ...tableData.rows.flat(),
+        ];
+
+        const cellTasks = cellIds
+          .map((cellId, idx) => {
+            const cellText = allCellTexts[idx];
+            if (!cellText) return null;
+            return larkClient.docx.v1.documentBlockChildren.create({
+              path: { document_id: documentId, block_id: cellId },
+              data: { children: [buildCellTextBlock(cellText)] as any, index: -1 },
+            });
+          })
+          .filter(Boolean);
+        await Promise.all(cellTasks);
+      }
+
+      // Flush remaining regular blocks
+      await flushRegular();
+
       return {
         content: [
           {
             type: "text",
-            text: `Content appended to document ${args.document_id}.`,
+            text: `Content appended to document ${documentId}.`,
           },
         ],
       };

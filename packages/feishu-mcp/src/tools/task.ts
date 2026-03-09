@@ -211,8 +211,13 @@ export async function handleTaskTool(
     }
 
     case "task_complete": {
-      await larkClient.task.v2.task.complete({
+      // Task V2 API has no dedicated complete method; set completed_at via patch
+      await larkClient.task.v2.task.patch({
         path: { task_guid: args.task_id as string },
+        data: {
+          task: { completed_at: String(Math.floor(Date.now() / 1000)) } as any,
+          update_fields: ["completed_at"],
+        },
       });
       return {
         content: [

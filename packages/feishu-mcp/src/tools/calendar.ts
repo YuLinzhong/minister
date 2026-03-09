@@ -203,11 +203,13 @@ export async function handleCalendarTool(
 
     case "cal_freebusy": {
       const userIds = args.user_ids as string[];
+      // SDK types define user_id as string, but the actual API accepts an object
+      // with { user_ids: string[], id_type: string } for batch querying.
       const res = await larkClient.calendar.v4.freebusy.list({
         data: {
           time_min: toUnixSeconds(args.start_time as string),
           time_max: toUnixSeconds(args.end_time as string),
-          user_id: { user_ids: userIds, id_type: "open_id" },
+          user_id: { user_ids: userIds, id_type: "open_id" } as any,
         },
       });
       return {

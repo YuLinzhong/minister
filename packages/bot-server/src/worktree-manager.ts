@@ -127,6 +127,13 @@ function refreshDeployFiles(worktreePath: string): void {
   // settings.json — permission deny-rules (security: new deny rules must propagate)
   const settingsPath = resolve(worktreePath, ".claude/settings.json");
   writeFileSync(settingsPath, CACHED_SETTINGS_JSON, { mode: 0o600 });
+
+  // Built-in skills — refresh on each deploy so existing users get new/updated skills
+  for (const [name, content] of BUILTIN_SKILLS) {
+    const dir = resolve(worktreePath, `.claude/skills/${name}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, "SKILL.md"), content, { mode: 0o600 });
+  }
 }
 
 // Built-in skill: background knowledge for workspace management (auto-loaded by Claude when relevant)
@@ -187,6 +194,78 @@ Common servers:
 | Fetch | npx | ["-y", "@modelcontextprotocol/server-fetch"] | — |
 `;
 
+// Built-in skill: best practices for creating and managing Feishu Bitable (multi-dimensional tables)
+const FEISHU_BITABLE_SKILL = `---
+name: feishu-bitable
+description: 飞书多维表格操作最佳实践指南 — 创建、配置字段、写入数据的完整流程。当用户要求创建表格、数据统计或信息汇总时自动加载。
+---
+
+# 飞书多维表格操作指南
+
+## 核心流程
+
+创建新的多维表格项目：
+\`\`\`
+bitable_create_app → bitable_create_table → bitable_create_record
+\`\`\`
+
+### 步骤一：创建 Bitable 应用
+
+调用 bitable_create_app，传入 name（应用名称）。返回值中包含 app_token 和 default_table_id。
+
+### 步骤二：创建数据表格
+
+调用 bitable_create_table，传入 app_token、name（表格名称）和 fields（字段定义数组）。
+
+字段类型对照表：
+- 1: 文本 (Text)
+- 2: 数字 (Number)
+- 3: 单选 (SingleSelect)
+- 4: 多选 (MultiSelect)
+- 5: 日期时间 (DateTime)
+- 7: 复选框 (Checkbox)
+- 11: 用户 (User)
+- 13: 电话 (Phone)
+- 15: 链接 (URL)
+- 22: 位置 (Location)
+
+### 步骤三：添加记录数据
+
+调用 bitable_create_record，传入 app_token、table_id 和 fields（{字段名: 值} 对象）。
+
+## 关键注意事项
+
+1. API 成功不代表界面立即显示 — 飞书多维表格存在数据同步延迟（通常 1-5 分钟），告知用户需要等待或刷新页面。
+2. 字段名一致性 — update 时字段名必须与创建时完全一致，推荐简洁命名，避免特殊字符。
+3. 批量操作 — 避免一次性创建过多记录，分批添加并逐步验证。
+
+## 操作模板
+
+### 创建完整的数据表格
+1. 创建应用 (bitable_create_app)
+2. 创建表格并定义字段结构 (bitable_create_table)
+3. 添加示例数据验证结构正确 (bitable_create_record)
+4. 批量添加真实数据
+5. 查询确认最终结果 (bitable_query)
+6. 提供给用户访问链接
+
+### 更新现有记录
+1. 先查询获取 record_id (bitable_query)
+2. 使用 bitable_update_record 更新
+3. 再次查询确认更新成功
+
+### 查询数据
+- page_size: 控制返回数量（默认 20，最大 50）
+- filter: 使用过滤表达式筛选数据
+- sort: 设置排序规则
+`;
+
+// All built-in skills — written/refreshed on every deploy for both new and existing worktrees
+const BUILTIN_SKILLS: ReadonlyArray<[name: string, content: string]> = [
+  ["workspace-guide", WORKSPACE_GUIDE_SKILL],
+  ["feishu-bitable", FEISHU_BITABLE_SKILL],
+];
+
 // Track initialized users in memory to avoid per-request filesystem stat in the hot path
 const initializedUsers = new Set<string>();
 
@@ -206,12 +285,8 @@ export function ensureUserWorktree(userId: string): string {
   const settingsPath = resolve(worktreePath, ".claude/settings.json");
 
   if (!existsSync(settingsPath)) {
-    // First visit — initialize directory structure (skills dir + default skill)
-    const guideDir = resolve(worktreePath, ".claude/skills/workspace-guide");
-    mkdirSync(guideDir, { recursive: true });
-
-    // Write the built-in workspace-guide skill
-    writeFileSync(resolve(guideDir, "SKILL.md"), WORKSPACE_GUIDE_SKILL, { mode: 0o600 });
+    // First visit — initialize directory structure
+    mkdirSync(resolve(worktreePath, ".claude/skills"), { recursive: true });
 
     // Feishu group chat IDs start with "oc_", user IDs start with "ou_"
     const isGroup = userId.startsWith("oc_");
