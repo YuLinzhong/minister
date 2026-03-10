@@ -36,7 +36,7 @@ RUN bun install -g @openai/codex
 
 WORKDIR /app
 
-# Copy installed dependencies (bun hoists all deps to root node_modules)
+# Copy installed dependencies
 COPY --from=deps /app/node_modules ./node_modules
 
 # Copy source code and config
@@ -44,6 +44,10 @@ COPY package.json ./
 COPY packages/shared/ packages/shared/
 COPY packages/bot-server/ packages/bot-server/
 COPY packages/feishu-mcp/ packages/feishu-mcp/
+
+# Copy workspace-specific node_modules (Bun places per-workspace deps here, not root)
+COPY --from=deps /app/packages/bot-server/node_modules ./packages/bot-server/node_modules
+COPY --from=deps /app/packages/feishu-mcp/node_modules ./packages/feishu-mcp/node_modules
 COPY .claude/ .claude/
 COPY config/ config/
 COPY scripts/ scripts/
