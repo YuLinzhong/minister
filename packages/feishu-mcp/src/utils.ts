@@ -18,3 +18,12 @@ export function unknownToolError(name: string): ToolResult {
     isError: true,
   };
 }
+
+export function getFeishuErrorCode(error: unknown): number | undefined {
+  const code = (error as { response?: { data?: { code?: unknown } } })?.response?.data?.code;
+  return typeof code === "number" ? code : undefined;
+}
+
+export function isFeishuUserPermissionError(error: unknown): boolean {
+  return getFeishuErrorCode(error) === 99991679;
+}

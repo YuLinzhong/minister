@@ -57,7 +57,16 @@ function canUpdate(messageId: string): boolean {
 function buildBotAuthorizeUrl(): string | undefined {
   if (!config.admin.baseUrl) return undefined;
   const redirectUri = `${config.admin.baseUrl}/api/v1/auth/callback`;
-  return `${FEISHU_AUTHORIZE_URL}?app_id=${config.feishu.appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&state=bot`;
+  const params = new URLSearchParams({
+    app_id: config.feishu.appId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    state: "bot",
+  });
+  if (config.feishu.userScopes.length > 0) {
+    params.set("scope", config.feishu.userScopes.join(" "));
+  }
+  return `${FEISHU_AUTHORIZE_URL}?${params.toString()}`;
 }
 
 async function sendCard(chatId: string, cardJson: string): Promise<string | undefined> {
@@ -93,14 +102,25 @@ type FeishuMessage = {
 // Extract text and image_keys from a single Feishu message
 function extractContent(message: FeishuMessage): { text: string; imageKeys: string[] } {
   if (!message.content) return { text: "", imageKeys: [] };
+  if (message.message_type === "text") {
+    let text = "";
+    try {
+      const parsed = JSON.parse(message.content);
+      if (typeof parsed === "string") {
+        text = parsed;
+      } else if (typeof parsed?.text === "string") {
+        text = parsed.text;
+      }
+    } catch {
+      // Fall back to raw content so plain-text payloads are not silently dropped.
+      text = message.content;
+    }
+    // Remove @mention placeholders like @_user_1
+    for (const m of message.mentions ?? []) text = text.replace(m.key, "");
+    return { text: text.trim(), imageKeys: [] };
+  }
   try {
     const parsed = JSON.parse(message.content);
-    if (message.message_type === "text") {
-      let text: string = parsed.text || "";
-      // Remove @mention placeholders like @_user_1
-      for (const m of message.mentions ?? []) text = text.replace(m.key, "");
-      return { text: text.trim(), imageKeys: [] };
-    }
     if (message.message_type === "image") {
       return { text: "", imageKeys: parsed.image_key ? [parsed.image_key] : [] };
     }
@@ -207,7 +227,10 @@ async function processCombinedMessages(
   }
 
   const combinedText = textParts.join("\n");
-  if (!combinedText && imagePaths.length === 0) return;
+  if (!combinedText && imagePaths.length === 0) {
+    console.log(`[Minister] Skipping message batch with empty extracted content for ${userId}`);
+    return;
+  }
 
   console.log(
     `[Minister] Processing ${messages.length} msg(s) from ${userId}: ` +
@@ -299,6 +322,10 @@ export async function handleMessage(data: {
   message: FeishuMessage;
 }): Promise<void> {
   const { sender, message } = data;
+  const senderId = sender.sender_id.open_id || sender.sender_id.user_id || "unknown";
+  console.log(
+    `[Minister] Event received: msg=${message.message_id}, type=${message.message_type}, chat=${message.chat_type}, sender=${senderId}`,
+  );
 
   // Reject stale messages: guards against re-delivery after service restart or WS reconnect
   if (message.create_time) {
@@ -310,10 +337,16 @@ export async function handleMessage(data: {
   }
 
   // Deduplicate: skip if already processed within this session
-  if (processedMessages.has(message.message_id)) return;
+  if (processedMessages.has(message.message_id)) {
+    console.log(`[Minister] Skipping duplicate message ${message.message_id}`);
+    return;
+  }
   processedMessages.set(message.message_id, Date.now());
 
-  if (!SUPPORTED_TYPES.has(message.message_type)) return;
+  if (!SUPPORTED_TYPES.has(message.message_type)) {
+    console.log(`[Minister] Skipping unsupported message type ${message.message_type} (${message.message_id})`);
+    return;
+  }
 
   // In group chat, check admin-config for group behavior settings
   if (message.chat_type === "group") {
@@ -322,25 +355,33 @@ export async function handleMessage(data: {
     const requireMention = behavior?.requireMention ?? true;
 
     if (requireMention) {
-      if (!message.mentions?.length) return;
+      if (!message.mentions?.length) {
+        console.log(`[Minister] Skipping group message without @mention ${message.message_id}`);
+        return;
+      }
       const myOpenId = await getBotOpenId();
-      if (!myOpenId || !message.mentions.some((m) => m.id.open_id === myOpenId)) return;
+      if (!myOpenId || !message.mentions.some((m) => m.id.open_id === myOpenId)) {
+        console.log(`[Minister] Skipping group message not mentioning bot ${message.message_id}`);
+        return;
+      }
     }
 
     // Member whitelist: if set, only listed users can trigger the bot
     const whitelist = behavior?.memberWhitelist;
     if (whitelist?.length) {
-      const senderId = sender.sender_id.open_id || sender.sender_id.user_id;
       if (senderId && !whitelist.includes(senderId)) return;
     }
   }
 
-  const userId = sender.sender_id.open_id || sender.sender_id.user_id || "unknown";
+  const userId = senderId;
 
   // Quick ping/pong shortcut — bypass aggregation for instant response
   if (message.message_type === "text") {
     const { text } = extractContent(message);
-    if (!text) return;
+    if (!text) {
+      console.log(`[Minister] Skipping empty text message ${message.message_id}`);
+      return;
+    }
     if (text.toLowerCase() === "ping") {
       await client.im.v1.message.reply({
         path: { message_id: message.message_id },

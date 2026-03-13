@@ -1,8 +1,11 @@
 // P0: Contact tools — search user, get user info
 import { larkClient } from "../client.js";
-import { unknownToolError } from "../utils.js";
+import { isFeishuUserPermissionError, unknownToolError } from "../utils.js";
 import type { ToolResult } from "@minister/shared";
 import type { LarkRequestOptions } from "../user-token.js";
+
+const CONTACT_SCAN_PAGE_SIZE = 100;
+const CONTACT_SCAN_MAX_PAGES = 10;
 
 export const contactToolDefs = [
   {
@@ -54,20 +57,11 @@ export async function handleContactTool(
 ): Promise<ToolResult> {
   switch (name) {
     case "contact_search": {
-      // SDK types don't expose search.v2.user, but the API endpoint exists
-      const res = await (larkClient as any).search.v2.user.create({
-        params: {
-          page_size: (args.page_size as number) || 10,
-          user_id_type: "open_id",
-        },
-        data: { query: args.query as string },
-      }, larkOptions);
-      const users = (res.data?.items ?? []).map((u: any) => ({
-        open_id: u.user_id,
-        name: u.name,
-        department: u.department?.name,
-        avatar: u.avatar?.avatar_72,
-      }));
+      const users = await searchUsersByName(
+        args.query as string,
+        (args.page_size as number) || 10,
+        larkOptions,
+      );
       return {
         content: [{ type: "text", text: JSON.stringify(users, null, 2) }],
       };
@@ -101,4 +95,100 @@ export async function handleContactTool(
     default:
       return unknownToolError(name);
   }
+}
+
+function normalizeUserQuery(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function userMatchesQuery(
+  user: {
+    name?: string;
+    nickname?: string;
+    en_name?: string;
+  },
+  query: string,
+): boolean {
+  const normalizedQuery = normalizeUserQuery(query);
+  if (!normalizedQuery) return false;
+  return [user.name, user.nickname, user.en_name]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => normalizeUserQuery(value).includes(normalizedQuery));
+}
+
+function mapUserSummary(user: {
+  open_id?: string;
+  user_id?: string;
+  name?: string;
+  nickname?: string;
+  en_name?: string;
+  department_ids?: string[];
+  avatar?: { avatar_72?: string };
+}): {
+  open_id?: string;
+  user_id?: string;
+  name?: string;
+  nickname?: string;
+  en_name?: string;
+  department_ids?: string[];
+  avatar?: string;
+} {
+  return {
+    open_id: user.open_id,
+    user_id: user.user_id,
+    name: user.name,
+    nickname: user.nickname,
+    en_name: user.en_name,
+    department_ids: user.department_ids,
+    avatar: user.avatar?.avatar_72,
+  };
+}
+
+async function searchUsersByName(
+  query: string,
+  limit: number,
+  larkOptions?: LarkRequestOptions,
+): Promise<Array<ReturnType<typeof mapUserSummary>>> {
+  try {
+    return await searchUsersByNameWithOptions(query, limit, larkOptions);
+  } catch (error) {
+    if (!larkOptions || !isFeishuUserPermissionError(error)) {
+      throw error;
+    }
+    return searchUsersByNameWithOptions(query, limit, undefined);
+  }
+}
+
+async function searchUsersByNameWithOptions(
+  query: string,
+  limit: number,
+  larkOptions?: LarkRequestOptions,
+): Promise<Array<ReturnType<typeof mapUserSummary>>> {
+  const pageSize = Math.max(limit, CONTACT_SCAN_PAGE_SIZE);
+  const matches: Array<ReturnType<typeof mapUserSummary>> = [];
+  let pageToken: string | undefined;
+
+  for (let page = 0; page < CONTACT_SCAN_MAX_PAGES && matches.length < limit; page += 1) {
+    const res = await larkClient.contact.v3.user.list({
+      params: {
+        user_id_type: "open_id",
+        page_size: pageSize,
+        page_token: pageToken,
+      },
+    }, larkOptions);
+
+    const users = res.data?.items ?? [];
+    for (const user of users) {
+      if (!userMatchesQuery(user, query)) continue;
+      matches.push(mapUserSummary(user));
+      if (matches.length >= limit) break;
+    }
+
+    if (!res.data?.has_more || !res.data.page_token) {
+      break;
+    }
+    pageToken = res.data.page_token;
+  }
+
+  return matches.slice(0, limit);
 }

@@ -12,13 +12,41 @@ const FEISHU_APP_TOKEN_URL = "https://open.feishu.cn/open-apis/auth/v3/app_acces
 const FEISHU_USER_TOKEN_URL = "https://open.feishu.cn/open-apis/authen/v1/oidc/access_token";
 const FEISHU_USER_INFO_URL = "https://open.feishu.cn/open-apis/authen/v1/user_info";
 
+function normalizeFeishuScopes(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const scopes = value.filter((scope): scope is string => typeof scope === "string" && scope.length > 0);
+    return scopes.length > 0 ? scopes : undefined;
+  }
+  if (typeof value === "string") {
+    const scopes = value.split(/\s+/).map((scope) => scope.trim()).filter(Boolean);
+    return scopes.length > 0 ? scopes : undefined;
+  }
+  return undefined;
+}
+
+function buildAuthorizeUrl(redirectUri: string, state?: string): string {
+  const params = new URLSearchParams({
+    app_id: config.feishu.appId,
+    redirect_uri: redirectUri,
+    response_type: "code",
+  });
+
+  if (config.feishu.userScopes.length > 0) {
+    params.set("scope", config.feishu.userScopes.join(" "));
+  }
+  if (state) {
+    params.set("state", state);
+  }
+
+  return `${FEISHU_AUTHORIZE_URL}?${params.toString()}`;
+}
+
 // GET /api/v1/auth/feishu-url — return the Feishu OAuth authorization URL
 auth.get("/feishu-url", (c) => {
   const base = config.admin.baseUrl || getOrigin(c);
   const redirectUri = c.req.query("redirect_uri") || `${base}/api/v1/auth/callback`;
   const state = c.req.query("state");
-  const stateParam = state ? `&state=${encodeURIComponent(state)}` : "";
-  const url = `${FEISHU_AUTHORIZE_URL}?app_id=${config.feishu.appId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code${stateParam}`;
+  const url = buildAuthorizeUrl(redirectUri, state || undefined);
   return c.json({ url, redirectUri });
 });
 
@@ -73,6 +101,7 @@ auth.get("/callback", async (c) => {
       refresh_token: String(userToken.refresh_token || ""),
       expires_at: now + Number(userToken.expires_in || 0),
       refresh_expires_at: now + Number(userToken.refresh_expires_in || 0),
+      scopes: normalizeFeishuScopes(userToken.scope) || config.feishu.userScopes,
     });
 
     if (state === "bot") {

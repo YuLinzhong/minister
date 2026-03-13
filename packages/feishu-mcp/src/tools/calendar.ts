@@ -1,26 +1,79 @@
 // P1: Calendar tools — create event, query events, freebusy
 import { larkClient } from "../client.js";
-import { toUnixSeconds, unknownToolError } from "../utils.js";
+import { isFeishuUserPermissionError, toUnixSeconds, unknownToolError } from "../utils.js";
 import type { ToolResult } from "@minister/shared";
 import type { LarkRequestOptions } from "../user-token.js";
 
 // Cache the Promise itself so concurrent callers share a single in-flight request
-let primaryCalendarIdPromise: Promise<string> | undefined;
+let appPrimaryCalendarIdPromise: Promise<string> | undefined;
 
-function getPrimaryCalendarId(): Promise<string> {
-  if (!primaryCalendarIdPromise) {
-    primaryCalendarIdPromise = (async () => {
+function pickPreferredCalendarId(
+  calendars: Array<{ calendar_id?: string; is_primary?: boolean; role?: string }>,
+): string {
+  const primary = calendars.find((calendar) => calendar.is_primary);
+  const owned = calendars.find((calendar) => calendar.role === "owner");
+  const writable = calendars.find((calendar) => calendar.role === "writer");
+  return (primary || owned || writable || calendars[0])?.calendar_id || "primary";
+}
+
+function getAppPrimaryCalendarId(): Promise<string> {
+  if (!appPrimaryCalendarIdPromise) {
+    appPrimaryCalendarIdPromise = (async () => {
       const calList = await larkClient.calendar.v4.calendar.list({});
-      const cals = calList.data?.calendar_list;
-      if (cals?.length) {
-        const owned = cals.find((c) => c.role === "owner");
-        const writable = cals.find((c) => c.role === "writer");
-        return (owned || writable || cals[0]).calendar_id!;
-      }
-      return "primary";
+      return pickPreferredCalendarId(calList.data?.calendar_list ?? []);
     })();
   }
-  return primaryCalendarIdPromise;
+  return appPrimaryCalendarIdPromise;
+}
+
+async function getUserPrimaryCalendarId(larkOptions: LarkRequestOptions): Promise<string> {
+  const calList = await larkClient.calendar.v4.calendar.list({}, larkOptions);
+  return pickPreferredCalendarId(calList.data?.calendar_list ?? []);
+}
+
+async function resolveCalendarContext(
+  larkOptions?: LarkRequestOptions,
+  explicitCalendarId?: string,
+): Promise<{
+  calendarId: string;
+  requestOptions?: LarkRequestOptions;
+  usingUserIdentity: boolean;
+}> {
+  if (!larkOptions) {
+    const calendarId = explicitCalendarId || await getAppPrimaryCalendarId();
+    return { calendarId, requestOptions: undefined, usingUserIdentity: false };
+  }
+
+  try {
+    const calendarId = explicitCalendarId || await getUserPrimaryCalendarId(larkOptions);
+    return { calendarId, requestOptions: larkOptions, usingUserIdentity: true };
+  } catch (error) {
+    if (!isFeishuUserPermissionError(error)) {
+      throw error;
+    }
+    const calendarId = explicitCalendarId || await getAppPrimaryCalendarId();
+    return { calendarId, requestOptions: undefined, usingUserIdentity: false };
+  }
+}
+
+async function runReadOnlyCalendarOperation<T>(
+  operation: (context: {
+    calendarId: string;
+    requestOptions?: LarkRequestOptions;
+    usingUserIdentity: boolean;
+  }) => Promise<T>,
+  larkOptions?: LarkRequestOptions,
+  explicitCalendarId?: string,
+): Promise<T> {
+  const context = await resolveCalendarContext(larkOptions, explicitCalendarId);
+  try {
+    return await operation(context);
+  } catch (error) {
+    if (!context.usingUserIdentity || !isFeishuUserPermissionError(error)) {
+      throw error;
+    }
+    return operation(await resolveCalendarContext(undefined, explicitCalendarId));
+  }
 }
 
 export const calendarToolDefs = [
@@ -138,46 +191,57 @@ export async function handleCalendarTool(
 
       const startTs = toUnixSeconds(args.start_time as string);
       const endTs = toUnixSeconds(args.end_time as string);
-
-      const calendarId = larkOptions
-        ? "primary"
-        : await getPrimaryCalendarId();
-
-      const res = await larkClient.calendar.v4.calendarEvent.create({
-        path: { calendar_id: calendarId },
-        data: {
-          summary: args.summary as string,
-          description: (args.description as string) || undefined,
-          start_time: { timestamp: startTs },
-          end_time: { timestamp: endTs },
-          attendee_ability: "can_modify_event",
-        },
-      }, larkOptions);
+      let context = await resolveCalendarContext(larkOptions);
+      let res;
+      try {
+        res = await larkClient.calendar.v4.calendarEvent.create({
+          path: { calendar_id: context.calendarId },
+          data: {
+            summary: args.summary as string,
+            description: (args.description as string) || undefined,
+            start_time: { timestamp: startTs },
+            end_time: { timestamp: endTs },
+            attendee_ability: "can_modify_event",
+          },
+        }, context.requestOptions);
+      } catch (error) {
+        if (!context.usingUserIdentity || !isFeishuUserPermissionError(error)) {
+          throw error;
+        }
+        context = await resolveCalendarContext(undefined);
+        res = await larkClient.calendar.v4.calendarEvent.create({
+          path: { calendar_id: context.calendarId },
+          data: {
+            summary: args.summary as string,
+            description: (args.description as string) || undefined,
+            start_time: { timestamp: startTs },
+            end_time: { timestamp: endTs },
+            attendee_ability: "can_modify_event",
+          },
+        }, context.requestOptions);
+      }
 
       const eventId = res.data?.event?.event_id;
-
-      // With user identity the event already belongs to the requester,
-      // so only add explicitly requested attendees.
       if (eventId) {
         const allAttendees: Array<{ type: "user" | "chat" | "resource"; user_id?: string; chat_id?: string }> = [];
-        if (userOpenId && !larkOptions) {
+        if (userOpenId && !context.usingUserIdentity) {
           allAttendees.push({ type: "user", user_id: userOpenId });
         }
         if (extraAttendees?.length) {
-          for (const a of extraAttendees) {
+          for (const attendee of extraAttendees) {
             allAttendees.push({
-              type: (a.type as "user" | "chat" | "resource") || "user",
-              user_id: a.user_id,
-              chat_id: a.chat_id,
+              type: (attendee.type as "user" | "chat" | "resource") || "user",
+              user_id: attendee.user_id,
+              chat_id: attendee.chat_id,
             });
           }
         }
         if (allAttendees.length > 0) {
           await larkClient.calendar.v4.calendarEventAttendee.create({
-            path: { calendar_id: calendarId, event_id: eventId },
+            path: { calendar_id: context.calendarId, event_id: eventId },
             params: { user_id_type: "open_id" },
             data: { attendees: allAttendees },
-          }, larkOptions);
+          }, context.requestOptions);
         }
       }
 
@@ -185,22 +249,23 @@ export async function handleCalendarTool(
         content: [
           {
             type: "text",
-            text: `Event created. event_id: ${eventId}, summary: ${args.summary}`,
+            text: `Event created. event_id: ${eventId}, summary: ${args.summary}, identity: ${context.usingUserIdentity ? "user" : "app_fallback"}`,
           },
         ],
       };
     }
 
     case "cal_query_events": {
-      const calendarId = (args.calendar_id as string) || "primary";
-      const res = await larkClient.calendar.v4.calendarEvent.list({
-        path: { calendar_id: calendarId },
-        params: {
-          start_time: toUnixSeconds(args.start_time as string),
-          end_time: toUnixSeconds(args.end_time as string),
-          page_size: 50,
-        },
-      }, larkOptions);
+      const res = await runReadOnlyCalendarOperation(({ calendarId, requestOptions }) => {
+        return larkClient.calendar.v4.calendarEvent.list({
+          path: { calendar_id: calendarId },
+          params: {
+            start_time: toUnixSeconds(args.start_time as string),
+            end_time: toUnixSeconds(args.end_time as string),
+            page_size: 50,
+          },
+        }, requestOptions);
+      }, larkOptions, args.calendar_id as string | undefined);
       const events = (res.data?.items ?? []).map((e) => ({
         event_id: e.event_id,
         summary: e.summary,

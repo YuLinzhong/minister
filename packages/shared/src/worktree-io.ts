@@ -58,9 +58,18 @@ export function writeFeishuToken(id: string, token: FeishuUserToken): void {
   writeFileSync(feishuTokenPath(id), JSON.stringify(token, null, 2) + "\n", { mode: 0o600 });
 }
 
+function hasRequiredFeishuScopes(token: FeishuUserToken): boolean {
+  const requiredScopes = config.feishu.userScopes;
+  if (requiredScopes.length === 0) return true;
+  if (!Array.isArray(token.scopes) || token.scopes.length === 0) return false;
+  const grantedScopes = new Set(token.scopes);
+  return requiredScopes.every((scope) => grantedScopes.has(scope));
+}
+
 export function hasValidFeishuToken(id: string): boolean {
   const token = readFeishuToken(id);
   if (!token?.refresh_token) return false;
+  if (!hasRequiredFeishuScopes(token)) return false;
   return token.refresh_expires_at > Math.floor(Date.now() / 1000);
 }
 

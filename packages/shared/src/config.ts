@@ -21,6 +21,18 @@ function loadPromptFile(filename: string): string {
   return readFileSync(resolve(PROJECT_ROOT, "config", filename), "utf-8").trim();
 }
 
+function loadFeishuUserScopes(): string[] {
+  try {
+    const raw = readFileSync(resolve(PROJECT_ROOT, "config", "feishu-permissions.json"), "utf-8");
+    const parsed = JSON.parse(raw) as { scopes?: { user?: unknown } };
+    return Array.isArray(parsed.scopes?.user)
+      ? parsed.scopes.user.filter((scope): scope is string => typeof scope === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 const VALID_ENGINES = ["claude", "codex"] as const;
 type EngineType = (typeof VALID_ENGINES)[number];
 
@@ -33,6 +45,7 @@ export const config = {
   feishu: {
     appId: required("FEISHU_APP_ID"),
     appSecret: required("FEISHU_APP_SECRET"),
+    userScopes: loadFeishuUserScopes(),
   },
   engine: validateEngine(process.env.ENGINE_TYPE || "claude"),
   systemPrompt: process.env.SYSTEM_PROMPT || loadPromptFile("system-prompt.md"),

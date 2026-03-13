@@ -19,6 +19,7 @@ export interface FeishuUserToken {
   refresh_token: string;
   expires_at: number;
   refresh_expires_at: number;
+  scopes?: string[];
 }
 
 // ---------------------------------------------------------------------------

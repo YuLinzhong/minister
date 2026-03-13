@@ -15,6 +15,25 @@ function isTokenFresh(expiresAt: number): boolean {
   return expiresAt > nowInSeconds() + TOKEN_EXPIRY_BUFFER_SECONDS;
 }
 
+function normalizeFeishuScopes(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) {
+    const scopes = value.filter((scope): scope is string => typeof scope === "string" && scope.length > 0);
+    return scopes.length > 0 ? scopes : undefined;
+  }
+  if (typeof value === "string") {
+    const scopes = value.split(/\s+/).map((scope) => scope.trim()).filter(Boolean);
+    return scopes.length > 0 ? scopes : undefined;
+  }
+  return undefined;
+}
+
+function hasRequiredFeishuScopes(scopes: string[] | undefined): boolean {
+  if (config.feishu.userScopes.length === 0) return true;
+  if (!Array.isArray(scopes) || scopes.length === 0) return false;
+  const grantedScopes = new Set(scopes);
+  return config.feishu.userScopes.every((scope) => grantedScopes.has(scope));
+}
+
 async function getAppAccessToken(): Promise<string> {
   const res = await fetch(FEISHU_APP_TOKEN_URL, {
     method: "POST",
@@ -31,7 +50,11 @@ async function getAppAccessToken(): Promise<string> {
   return data.app_access_token;
 }
 
-async function refreshUserToken(openId: string, refreshToken: string): Promise<string | null> {
+async function refreshUserToken(
+  openId: string,
+  refreshToken: string,
+  currentScopes?: string[],
+): Promise<string | null> {
   const appAccessToken = await getAppAccessToken();
   const res = await fetch(FEISHU_REFRESH_TOKEN_URL, {
     method: "POST",
@@ -51,11 +74,13 @@ async function refreshUserToken(openId: string, refreshToken: string): Promise<s
   }
 
   const now = nowInSeconds();
+  const scopes = normalizeFeishuScopes(data.data.scope) || currentScopes;
   writeFeishuToken(openId, {
     access_token: data.data.access_token,
     refresh_token: String(data.data.refresh_token || refreshToken),
     expires_at: now + Number(data.data.expires_in || 0),
     refresh_expires_at: now + Number(data.data.refresh_expires_in || 0),
+    scopes,
   });
   return data.data.access_token;
 }
@@ -63,6 +88,7 @@ async function refreshUserToken(openId: string, refreshToken: string): Promise<s
 export async function getValidUserToken(openId: string): Promise<string | null> {
   const token = readFeishuToken(openId);
   if (!token) return null;
+  if (!hasRequiredFeishuScopes(token.scopes)) return null;
 
   if (token.access_token && isTokenFresh(token.expires_at)) {
     return token.access_token;
@@ -73,7 +99,7 @@ export async function getValidUserToken(openId: string): Promise<string | null> 
   }
 
   try {
-    return await refreshUserToken(openId, token.refresh_token);
+    return await refreshUserToken(openId, token.refresh_token, token.scopes);
   } catch (error) {
     console.error("[lark] Failed to resolve valid user token:", error);
     return null;

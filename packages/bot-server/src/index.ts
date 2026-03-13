@@ -30,6 +30,12 @@ wsClient.start({
   eventDispatcher: new Lark.EventDispatcher({}).register({
     "im.message.receive_v1": async (data) => {
       try {
+        const event = data as {
+          message?: { message_id?: string; message_type?: string; chat_type?: string };
+        };
+        console.log(
+          `[Minister] WS event: msg=${event.message?.message_id || "unknown"}, type=${event.message?.message_type || "unknown"}, chat=${event.message?.chat_type || "unknown"}`,
+        );
         await handleMessage(data as any);
       } catch (err) {
         console.error("[Minister] Message handler error:", err);
