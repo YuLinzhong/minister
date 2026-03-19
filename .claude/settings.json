@@ -2,11 +2,19 @@
   "mcpServers": {
     "feishu": {
       "command": "bun",
-      "args": ["run", "./packages/feishu-mcp/src/index.ts"],
+      "args": [
+        "run",
+        "./packages/feishu-mcp/src/index.ts"
+      ],
       "env": {
         "FEISHU_APP_ID": "${FEISHU_APP_ID}",
         "FEISHU_APP_SECRET": "${FEISHU_APP_SECRET}"
       }
     }
+  },
+  "permissions": {
+    "allow": [
+      "mcp__feishu__*"
+    ]
   }
 }

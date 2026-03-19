@@ -47,8 +47,19 @@ for (const key of envKeys) {
   }
 }
 
-if (Object.keys(envBlock).length > 0) {
-  settings.env = { ...(settings.env as Record<string, string> || {}), ...envBlock };
+// Rebuild env block from scratch for tracked keys so that removing a key from
+// config/claude.env (e.g. switching from API key to local OAuth auth) also
+// removes it from settings.json. Untracked keys added by other tools are preserved.
+const existingEnv = (settings.env as Record<string, string>) || {};
+const filteredEnv: Record<string, string> = {};
+for (const [k, v] of Object.entries(existingEnv)) {
+  if (!envKeys.includes(k)) filteredEnv[k] = v; // keep untracked keys
+}
+settings.env = { ...filteredEnv, ...envBlock };
+if (Object.keys(settings.env).length === 0) delete settings.env;
+
+if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+  console.log("[generate-claude-settings] No API key found — using local Claude Code OAuth auth (~/.claude/)");
 }
 
 // Map CLAUDE_SETTINGS_* env vars to top-level settings.json fields

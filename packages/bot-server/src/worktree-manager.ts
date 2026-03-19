@@ -88,7 +88,7 @@ function buildCodexConfigToml(): string {
 }
 
 interface UserSettings {
-  permissions: { deny: string[] };
+  permissions: { allow: string[]; deny: string[] };
 }
 
 // Derive parent data directory (contains both worktrees/ and users/)
@@ -97,6 +97,9 @@ const DATA_DIR = resolve(config.worktreeDir, "..");
 // Permission deny rules built once from config — prevents cross-user data discovery via file tools
 const USER_SETTINGS: UserSettings = {
   permissions: {
+    allow: [
+      "mcp__feishu__*",
+    ],
     deny: [
       `Read(${config.worktreeDir}/)`,
       `Read(${config.userDataDir}/)`,
